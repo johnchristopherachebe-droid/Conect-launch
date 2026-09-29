@@ -1,0 +1,50 @@
+# Tests
+
+## Test 1 - Order tracking and delivery lifecycle [sanity]
+Viewport: mobile
+Covers: order lifecycle, rider location API, map tracking, vendor/rider state transitions
+Description: Verifies an active order can be tracked through delivery with the rider location rendered on a map.
+Steps:
+1. Open an active order and tap Track your order.
+2. As the rider, update location and delivery status.
+3. Return to the customer tracking view.
+Expected: The customer sees the current delivery state and a map showing the latest rider location.
+
+## Test 2 - Cancellation guardrails
+Viewport: mobile
+Covers: customer cancellation permission boundary, in-progress order protection
+Description: Verifies customers cannot cancel an order once preparation or delivery has started.
+Setup:
+1. Seed an order with deliveryStatus PREPARING.
+Steps:
+1. Attempt to cancel the prepared order.
+Expected: Cancellation is blocked and the customer is directed to Support.
+
+## Test 3 - Support attachment workflow
+Viewport: desktop
+Covers: support attachment storage, ticket persistence
+Description: Verifies Support can attach a file to a ticket and the attachment remains available.
+Steps:
+1. Open a support ticket as Support.
+2. Attach a small image or document.
+Expected: The attachment appears on the ticket and remains available after reopening it.
+
+## Test 4 - Admin finance and review moderation
+Viewport: desktop
+Covers: admin finance metrics, refund workflow, review moderation
+Description: Verifies Admin can inspect finance data and moderate reviews.
+Steps:
+1. Open Finance.
+2. Open Review Moderation.
+3. Hide a review and restore it.
+Expected: Finance metrics render and review visibility changes without errors.
+
+## Test 5 - Push notifications for marketplace events
+Viewport: mobile
+Covers: notification enablement, rider assignment notification, order status notification
+Description: Verifies a customer can enable push notifications and receive marketplace event notifications.
+Steps:
+1. Tap the bell in the customer header to enable notifications.
+2. Have a rider accept an active order.
+3. Advance the order to picked up or on the way.
+Expected: The customer receives notifications for rider assignment and order status changes when notifications are supported and enabled.
