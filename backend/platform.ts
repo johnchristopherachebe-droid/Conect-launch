@@ -54,18 +54,19 @@ export const storage = {
 export const secrets = { async readSecret(name:string) { const v=process.env[name]; if(!v) throw new Error(`Missing secret ${name}`); return v; } };
 
 // --- Email (direct SMTP, no third-party email API) ---
-let mailTransporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+let mailTransporter: any = null;
 function getMailTransporter() {
   if (mailTransporter) return mailTransporter;
   const host = process.env.SMTP_HOST, user = process.env.SMTP_USER, pass = process.env.SMTP_PASS;
   const port = Number(process.env.SMTP_PORT || 587);
   if (!host || !user || !pass) throw new Error('Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS.');
-  mailTransporter = nodemailer.createTransport({
+  const smtpOptions: any = {
     host, port, secure: port === 465, auth: { user, pass },
-    family: 4, // Railway/most container hosts have a broken IPv6 route to Gmail's SMTP servers,
-               // which shows up as a hanging "Connection timeout" — force IPv4 to avoid it.
+    family: 4,
     connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 15000,
-  });
+  };
+  mailTransporter = nodemailer.createTransport(smtpOptions);
+
   return mailTransporter;
 }
 export async function sendMail(to: string, subject: string, html: string) {
