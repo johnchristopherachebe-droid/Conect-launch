@@ -18,7 +18,7 @@ app.use('/storage',express.static(path.resolve(process.env.STORAGE_DIR||'./stora
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(maxRequests: number, windowMs: number) {
   return (req: any, res: any, next: any) => {
-    const key = `${req.ip}:${req.path}`;
+    const key = `${req.ip}:${req.originalUrl.split('?')[0]}`;
     const now = Date.now();
     const bucket = rateBuckets.get(key);
     if (!bucket || now > bucket.resetAt) {
@@ -62,7 +62,8 @@ const VERIFICATION_EXEMPT_PATHS = new Set([
   '/api/_healthcheck',
 ]);
 app.use('/api', async (req, res, next) => {
-  if (VERIFICATION_EXEMPT_PATHS.has(req.path)) return next();
+  const currentPath = req.originalUrl.split('?')[0];
+  if (VERIFICATION_EXEMPT_PATHS.has(currentPath)) return next();
   const auth = String(req.headers.authorization || '');
   if (!auth.startsWith('Bearer ')) return next(); // no token: let the route's own requireAuth() produce a 401
   try {
