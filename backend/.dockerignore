@@ -1,0 +1,6 @@
+node_modules
+.env
+.env.*
+test
+backups
+firebase-service-account.json

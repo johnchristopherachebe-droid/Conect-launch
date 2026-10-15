@@ -1,1 +1,0 @@
-export const realtime = async () => ({ statusCode: 200 });

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cönëct Admin</title>
+<style>
+:root{color-scheme:light dark;--brand:#0B5D47;--accent:#FF7A00;--line:#8884}
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px;margin-inline:auto}
+h1{color:var(--brand);margin:0}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+nav button,button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer}
+nav button.on,button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}button[data-doc-review][data-status="rejected"]{border-color:#b33;color:#b33}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #FFD23F;outline-offset:2px}
+input,select{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:12px 0}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.err{color:#d33;min-height:1.2em}.mute{opacity:.7}
+.pill{padding:2px 8px;border-radius:99px;border:1px solid var(--line);font-size:13px}
+</style></head><body>
+<div id="root"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const naira = (v) => '₦' + Number(v).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+let token = sessionStorage.getItem('token'), currentRole = sessionStorage.getItem('role') || 'admin', tab = 'orders', err = '', timer = null, openStore = null;
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const d = r.status === 204 ? null : await r.json().catch(() => ({}));
+  if (r.status === 401) { signOut(); throw new Error('Please sign in again'); }
+  if (!r.ok) throw new Error(d.error || (d.details || []).join(', ') || 'Something went wrong');
+  return d;
+}
+function signOut() { token = null; sessionStorage.removeItem('token'); sessionStorage.removeItem('role'); clearInterval(timer); render(); }
+async function run(fn) { try { err = ''; await fn(); } catch (e) { err = e.message; } show(); }
+
+function render() { token ? shell() : loginView(); }
+
+function loginView() {
+  $('#root').innerHTML = `<h1>Cönëct Admin</h1><p class="mute">Sign in with an admin account.</p>
+  <div class="row"><input id="em" type="email" placeholder="Email" aria-label="Email"><input id="pw" type="password" placeholder="Password" aria-label="Password">
+  <button class="primary" id="go">Sign in</button></div><p class="err" id="e"></p>`;
+  $('#go').onclick = async () => {
+    try {
+      const d = await api('POST', '/auth/login', { email: $('#em').value.trim(), password: $('#pw').value });
+      if (!['admin','support'].includes(d.user.role)) throw new Error('This account is not an admin or support agent');
+      token = d.token; currentRole = d.user.role; sessionStorage.setItem('token', token); sessionStorage.setItem('role', currentRole); render();
+    } catch (e) { $('#e').textContent = e.message; token = null; }
+  };
+}
+
+function shell() {
+  $('#root').innerHTML = `<header><h1>Cönëct ${currentRole === 'support' ? 'Support' : 'Admin'}</h1><button id="out">Sign out</button></header>
+  <nav class="row">${(currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','settings','support']).map((t) => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</nav>
+  <p class="err" id="e"></p><div id="view"></div>`;
+  $('#out').onclick = signOut;
+  document.querySelectorAll('nav [data-t]').forEach((b) => b.onclick = () => { tab = b.dataset.t; clearInterval(timer); shell(); });
+  show();
+}
+
+async function show() {
+  if (!token) return;
+  const e = $('#e'); if (e) e.textContent = err;
+  try {
+    if (tab === 'orders' && currentRole === 'admin') await ordersView();
+    else if (tab === 'stores' && currentRole === 'admin') await storesView();
+    else if (tab === 'couriers' && currentRole === 'admin') await couriersView();
+    else if (tab === 'vendors' && currentRole === 'admin') await vendorsView();
+    else if (tab === 'documents' && currentRole === 'admin') await documentsView();
+    else if (tab === 'zones' && currentRole === 'admin') await zonesView();
+    else if (tab === 'settings' && currentRole === 'admin') await settingsView();
+    else await supportView();
+  } catch (x) { if ($('#e')) $('#e').textContent = x.message; }
+}
+
+let statusFilter = '';
+async function ordersView() {
+  const rows = await api('GET', '/admin/orders' + (statusFilter ? '?status=' + statusFilter : ''));
+  $('#view').innerHTML = `<div class="row"><label>Status <select id="sf"><option value="">All</option>${['placed','preparing','ready','picked_up','delivered','cancelled'].map((s) => `<option ${s === statusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
+  <div class="scroll"><table><tr><th>Time</th><th>Store</th><th>Customer</th><th>Courier</th><th>Total</th><th>Paid</th><th>Status</th><th>Refund</th><th>Actions</th></tr>
+  ${rows.map((o) => `<tr><td>${esc(new Date(o.created_at).toLocaleString())}</td><td>${esc(o.store_name)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.courier_name || '-')}</td><td>${naira(o.total)}</td><td>${o.paid ? 'Yes' : 'No'}</td><td><span class="pill">${esc(o.status)}</span></td><td>${esc(o.refund_status || 'none')}</td>
+  <td>${['delivered','cancelled'].includes(o.status) ? '' : `<button data-c="${esc(o.id)}">Cancel</button>`} ${o.paid ? `<button data-refund-status="${esc(o.id)}" data-rs="${esc(o.refund_status || 'none')}">Update refund</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="9" class="mute">No orders yet.</td></tr>'}</table></div>`;
+  $('#sf').onchange = (ev) => { statusFilter = ev.target.value; show(); };
+  document.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
+    if (!confirm('Cancel this order? Paid orders are refunded.')) return;
+    run(async () => { const r = await api('POST', `/admin/orders/${b.dataset.c}/cancel`); if (r.refund === 'failed') throw new Error('Cancelled, but the refund failed. Refund it in the Paystack dashboard.'); });
+  });
+  document.querySelectorAll('[data-refund-status]').forEach((b) => b.onclick = () => {
+    const status = prompt('Refund status: requested, processing, completed, failed, rejected. Only choose completed after confirming settlement in Paystack.', b.dataset.rs === 'none' ? 'requested' : b.dataset.rs);
+    if (status === null) return;
+    const note = prompt(status === 'completed' ? 'Required: explain how you confirmed the refund in Paystack.' : 'Refund reconciliation note (optional)', '') ?? '';
+    if (status === 'completed' && !note.trim()) { alert('A reconciliation note is required before marking a refund completed.'); return; }
+    const provider_reference = status === 'completed' ? prompt('Enter the Paystack refund reference shown in the dashboard:') : undefined;
+    if (status === 'completed' && !provider_reference?.trim()) { alert('A Paystack refund reference is required.'); return; }
+    run(() => api('PATCH', `/admin/orders/${b.dataset.refundStatus}/refund-status`, { status, note, ...(provider_reference ? { provider_reference } : {}) }));
+  });
+  clearInterval(timer); timer = setInterval(() => { if (tab === 'orders') show(); }, 10000);
+}
+
+async function storesView() {
+  const stores = await api('GET', '/admin/stores');
+  let products = [];
+  if (openStore) products = await api('GET', `/admin/stores/${openStore}/products`);
+  const cur = stores.find((s) => s.id === openStore);
+  $('#view').innerHTML = `<div class="scroll"><table><tr><th>Store</th><th>Category</th><th>ETA</th><th>Delivery fee</th><th>Map location</th><th>Open</th><th></th></tr>
+  ${stores.map((s) => `<tr><td>${esc(s.emoji)} ${esc(s.name)}</td><td>${esc(s.category)}</td><td>${s.eta_minutes} min</td><td>${naira(s.delivery_fee)}</td><td>${s.lat != null ? esc(Number(s.lat).toFixed(4) + ', ' + Number(s.lng).toFixed(4)) : '<span class="mute">Not set</span>'} <button data-loc="${s.id}">Set</button></td>
+  <td><input type="checkbox" data-open="${s.id}" ${s.is_open ? 'checked' : ''} aria-label="Open ${esc(s.name)}"></td><td><button data-menu="${s.id}">Menu (${s.product_count})</button></td></tr>`).join('')}</table></div>
+  <h3>Add a store</h3><div class="row"><input id="sn" placeholder="Name"><select id="sc">${['food','groceries','pharmacy','courier'].map((c) => `<option>${c}</option>`).join('')}</select>
+  <input id="se" placeholder="Emoji" size="3"><input id="st" type="number" placeholder="ETA (min)" style="width:110px"><input id="sf2" type="number" placeholder="Fee (₦)" style="width:110px"><input id="sla" type="number" step="any" placeholder="Latitude" style="width:110px"><input id="slo" type="number" step="any" placeholder="Longitude" style="width:110px"><button class="primary" id="sa">Add store</button></div>
+  ${cur ? `<h3>${esc(cur.name)} menu</h3><div class="scroll"><table><tr><th>Item</th><th>Price</th><th>Available</th><th></th></tr>
+  ${products.map((p) => `<tr><td>${esc(p.name)}</td><td>${naira(p.price)}</td><td><input type="checkbox" data-av="${p.id}" ${p.available ? 'checked' : ''} aria-label="Available ${esc(p.name)}"></td><td><button data-price="${p.id}" data-p="${esc(p.price)}">Change price</button></td></tr>`).join('') || '<tr><td colspan="4" class="mute">No items yet.</td></tr>'}</table></div>
+  <div class="row"><input id="pn" placeholder="Item name"><input id="pp" type="number" placeholder="Price (₦)" style="width:120px"><button class="primary" id="pa">Add item</button></div>` : '<p class="mute">Choose a store’s menu to edit its items.</p>'}`;
+  document.querySelectorAll('[data-open]').forEach((c) => c.onchange = () => run(() => api('PATCH', `/admin/stores/${c.dataset.open}`, { is_open: c.checked })));
+  document.querySelectorAll('[data-loc]').forEach((b) => b.onclick = () => {
+    const v = prompt('Store location as "latitude, longitude" (copy it from a map app)', '');
+    if (v === null) return;
+    const [lat, lng] = v.split(',').map((x) => Number(x.trim()));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) { err = 'Enter two numbers, like 6.4281, 3.4219'; return show(); }
+    run(() => api('PATCH', `/admin/stores/${b.dataset.loc}`, { lat, lng }));
+  });
+  document.querySelectorAll('[data-menu]').forEach((b) => b.onclick = () => { openStore = +b.dataset.menu; show(); });
+  $('#sa').onclick = () => run(async () => {
+    const b = { name: $('#sn').value.trim(), category: $('#sc').value };
+    if ($('#se').value) b.emoji = $('#se').value; if ($('#st').value) b.eta_minutes = +$('#st').value; if ($('#sf2').value) b.delivery_fee = +$('#sf2').value;
+    if ($('#sla').value && $('#slo').value) { b.lat = +$('#sla').value; b.lng = +$('#slo').value; }
+    await api('POST', '/admin/stores', b);
+  });
+  document.querySelectorAll('[data-av]').forEach((c) => c.onchange = () => run(() => api('PATCH', `/admin/products/${c.dataset.av}`, { available: c.checked })));
+  document.querySelectorAll('[data-price]').forEach((b) => b.onclick = () => {
+    const v = prompt('New price in naira', b.dataset.p); if (v === null) return;
+    run(() => api('PATCH', `/admin/products/${b.dataset.price}`, { price: Number(v) }));
+  });
+  const pa = $('#pa'); if (pa) pa.onclick = () => run(() => api('POST', `/admin/stores/${openStore}/products`, { name: $('#pn').value.trim(), price: Number($('#pp').value) }));
+}
+
+async function couriersView() {
+  const rows = await api('GET', '/admin/couriers');
+  $('#view').innerHTML = `<p class="mute">Couriers cannot receive jobs until their profile, ID, driving licence, applicable vehicle registration and in-person orientation are approved. Review actual files in Documents.</p><div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>ID</th><th>Licence</th><th>Vehicle reg.</th><th>Orientation</th><th>Approval</th><th>Jobs</th><th>Action</th></tr>
+  ${rows.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td>${esc(c.phone || '-')}</td><td>${esc(c.vehicle_type || 'Profile missing')}</td><td>${esc(c.government_id_status || 'not submitted')}</td><td>${esc(c.driving_license_status || 'not submitted')}</td><td>${esc(c.vehicle_registration_status || 'not submitted')}</td><td>${c.orientation_completed ? 'Complete' : 'Pending'}</td><td>${c.courier_approved ? 'Approved' : 'Pending'}</td><td>${c.active_orders} active / ${c.delivered} delivered</td><td><button data-approve="${esc(c.id)}" data-value="${!c.courier_approved}">${c.courier_approved ? 'Suspend' : 'Review / approve'}</button></td></tr>`).join('') || '<tr><td colspan="11" class="mute">No couriers have signed up yet.</td></tr>'}</table></div>`;
+  document.querySelectorAll('[data-approve]').forEach((b) => b.onclick = () => {
+    const approve = b.dataset.value === 'true';
+    let body = { approved: approve };
+    if (approve) {
+      body.orientation_completed = confirm('Confirm the required in-person orientation has been completed. Choose Cancel if it has not.');
+      if (body.orientation_completed) body.orientation_notes = prompt('Orientation date and topics covered', '') ?? '';
+      body.review_notes = prompt('Internal courier review notes (optional)', '') ?? '';
+    }
+    run(() => api('PATCH', `/admin/couriers/${b.dataset.approve}/approval`, body));
+  });
+}
+async function vendorsView() {
+  const rows = await api('GET', '/admin/vendors');
+  $('#view').innerHTML = `<p class="mute">Approve vendors only after reviewing their actual submitted files in Documents and completing required in-person orientation. Document status cannot be manually overridden here.</p><div class="scroll"><table><tr><th>Business</th><th>Owner</th><th>Type</th><th>ID</th><th>Food safety</th><th>Orientation</th><th>Approval</th><th>Review</th></tr>
+  ${rows.map((v) => `<tr><td>${esc(v.business_name || 'Profile missing')}</td><td>${esc(v.name)}<br>${esc(v.email)}</td><td>${esc(v.business_type || '-')}</td><td>${esc(v.government_id_status || 'not submitted')}</td><td>${esc(v.food_safety_status || 'not submitted')}</td><td>${v.orientation_completed ? 'Complete' : 'Pending'}</td><td>${v.vendor_approved ? 'Approved' : 'Pending'}</td><td><button data-review="${esc(v.id)}">Review / approve</button></td></tr>`).join('') || '<tr><td colspan="8" class="mute">No vendor applications yet.</td></tr>'}</table></div>`;
+  document.querySelectorAll('[data-review]').forEach((b) => b.onclick = () => {
+    const id = b.dataset.review, row = rows.find((v) => v.id === id);
+    const orientation = confirm('Confirm that the required in-person orientation is complete?');
+    const orientationNotes = orientation ? (prompt('Orientation date and topics covered', row.orientation_notes || '') ?? '') : '';
+    const notes = prompt('Internal review notes (optional)', row.review_notes || '') ?? '';
+    const approve = confirm('Approve this vendor now? The server verifies uploaded document review statuses and orientation.');
+    run(async () => { await api('PATCH', `/admin/vendors/${id}/approval`, { approved: approve, orientation_completed: orientation, orientation_notes: orientationNotes, review_notes: notes }); await show(); });
+  });
+}
+async function documentsView() {
+  const rows = await api('GET','/admin/documents');
+  $('#view').innerHTML = `<h2>Private verification documents</h2><p class="mute">Files are encrypted in the database and available only to admins. Approving a file updates the applicant’s document status. Review files carefully and never download them to a shared device.</p><div class="scroll"><table><tr><th>Submitted</th><th>Applicant</th><th>Role</th><th>Document</th><th>File</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
+  ${rows.map((d)=>`<tr><td>${esc(new Date(d.created_at).toLocaleString())}</td><td>${esc(d.owner_name)}<br>${esc(d.owner_email)}</td><td>${esc(d.owner_role)}</td><td>${esc(d.document_type.replaceAll('_',' '))}</td><td>${esc(d.filename)}<br><button data-file="${d.id}" data-filename="${esc(d.filename)}">Download for review</button></td><td>${esc(d.review_status)}</td><td>${esc(d.review_notes || '-')}</td><td><button data-doc-review="${d.id}" data-status="approved">Approve</button> <button data-doc-review="${d.id}" data-status="rejected">Reject</button></td></tr>`).join('') || '<tr><td colspan="8" class="mute">No documents submitted yet.</td></tr>'}</table></div>`;
+  document.querySelectorAll('[data-file]').forEach((b)=>b.onclick=()=>run(async()=>{
+    const r=await fetch(`/admin/documents/${b.dataset.file}/file`,{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||'Could not download document');}
+    const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download=b.dataset.filename||'verification-document';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }));
+  document.querySelectorAll('[data-doc-review]').forEach((b)=>b.onclick=()=>run(async()=>{
+    const notes=prompt(`Review notes for ${b.dataset.status} (optional)`, '') ?? '';
+    await api('PATCH',`/admin/documents/${b.dataset.docReview}`,{review_status:b.dataset.status,review_notes:notes});
+    await documentsView();
+  }));
+}
+async function zonesView() {
+  const rows = await api('GET','/admin/delivery-zones');
+  $('#view').innerHTML = `<h2>No-delivery zones</h2><p class="mute">Addresses inside an enabled circular zone will be blocked at quote and checkout. Use map coordinates for the zone centre.</p>
+  <div class="scroll"><table><tr><th>Name</th><th>Centre latitude</th><th>Centre longitude</th><th>Radius (km)</th><th>Enabled</th><th></th></tr>
+  ${rows.map((z)=>`<tr><td>${esc(z.name)}</td><td>${Number(z.center_lat).toFixed(5)}</td><td>${Number(z.center_lng).toFixed(5)}</td><td>${Number(z.radius_km).toFixed(2)}</td><td><input type="checkbox" data-zone-toggle="${z.id}" ${z.enabled?'checked':''} aria-label="Enable ${esc(z.name)}"></td><td><button data-zone-delete="${z.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="mute">No zones configured.</td></tr>'}</table></div>
+  <h3>Add a no-delivery zone</h3><div class="row"><input id="zn" placeholder="Zone name" aria-label="Zone name"><input id="zlat" type="number" step="any" placeholder="Centre latitude" aria-label="Centre latitude"><input id="zlng" type="number" step="any" placeholder="Centre longitude" aria-label="Centre longitude"><input id="zrad" type="number" step="any" min="0.1" max="500" placeholder="Radius km" aria-label="Radius km"><button class="primary" id="za">Add zone</button></div>`;
+  document.querySelectorAll('[data-zone-toggle]').forEach((el)=>el.onchange=()=>run(async()=>{await api('PATCH',`/admin/delivery-zones/${el.dataset.zoneToggle}`,{enabled:el.checked});await zonesView();}));
+  document.querySelectorAll('[data-zone-delete]').forEach((el)=>el.onclick=()=>{if(confirm('Delete this no-delivery zone?'))run(async()=>{await api('DELETE',`/admin/delivery-zones/${el.dataset.zoneDelete}`);await zonesView();});});
+  $('#za').onclick=()=>run(async()=>{await api('POST','/admin/delivery-zones',{name:$('#zn').value.trim(),center_lat:Number($('#zlat').value),center_lng:Number($('#zlng').value),radius_km:Number($('#zrad').value),enabled:true});await zonesView();});
+}
+
+async function settingsView() {
+  const s=await api('GET','/admin/settings');
+  $('#view').innerHTML=`<h2>Delivery pricing</h2><p class="mute">These settings apply to future delivery quotes and orders. Prices are in naira (NGN). Existing orders keep their recorded fee.</p>
+  <div class="row"><label>Base fee (₦)<br><input id="dbase" type="number" min="0" step="1" value="${esc(s.delivery_base_fee?.value ?? 300)}"></label><label>Per kilometre (₦)<br><input id="dper" type="number" min="0" step="1" value="${esc(s.delivery_per_km?.value ?? 180)}"></label><label>Minimum fee (₦)<br><input id="dmin" type="number" min="0" step="1" value="${esc(s.delivery_min_fee?.value ?? 300)}"></label></div>
+  <button class="primary" id="savefees">Save delivery pricing</button>
+  <hr><h2>Vendor commission</h2><p class="mute">Default is 10% of the food subtotal only. Delivery fees are excluded. Changes apply to new orders only; existing orders keep their saved rate and amounts.</p>
+  <div class="row"><label>Commission (%)<br><input id="commission" type="number" min="0" max="50" step="0.5" value="${esc(s.vendor_commission_percent?.value ?? 10)}"></label></div><button class="primary" id="savecommission">Save commission</button>`;
+  $('#savefees').onclick=()=>run(async()=>{const result=await api('PATCH','/admin/settings/delivery-fees',{base_fee:Number($('#dbase').value),per_km:Number($('#dper').value),min_fee:Number($('#dmin').value)});alert(`Saved: base ₦${result.base_fee}, ₦${result.per_km}/km, minimum ₦${result.min_fee}.`);await settingsView();});
+  $('#savecommission').onclick=()=>run(async()=>{const result=await api('PATCH','/admin/settings/commission',{commission_percent:Number($('#commission').value)});alert(`Vendor commission saved at ${result.commission_percent}%. It applies to the food subtotal on new orders.`);await settingsView();});
+}
+
+async function supportView() {
+  const rows = await api('GET', currentRole === 'admin' ? '/admin/support/tickets' : '/support/tickets');
+  $('#view').innerHTML = `<div class="scroll"><table><tr><th>Created</th><th>Customer</th><th>Subject / message</th><th>Order</th><th>Status</th><th>Refund</th><th>Actions</th></tr>
+  ${rows.map((t) => `<tr><td>${esc(new Date(t.created_at).toLocaleString())}</td><td>${esc(t.customer_name)}<br>${esc(t.customer_email)}</td><td><b>${esc(t.subject)}</b><br>${esc(t.message)}</td><td>${esc(t.order_id || '-')}</td><td>${esc(t.status)}</td><td>${esc(t.refund_status)}</td><td><button data-ticket="${esc(t.id)}" data-status="${esc(t.status)}">Update status</button> <button data-reply="${esc(t.id)}">Reply / view thread</button> ${currentRole === 'admin' && t.order_id && !['requested','completed','processing'].includes(t.refund_status) ? `<button data-refund="${esc(t.id)}">Request refund</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="mute">No support tickets yet.</td></tr>'}</table></div>`;
+  document.querySelectorAll('[data-ticket]').forEach((b) => b.onclick = () => {
+    const status = prompt('Status: open, in_progress, escalated, resolved, closed', b.dataset.status); if (status === null) return;
+    const note = prompt('Admin note (optional)', '') ?? '';
+    run(() => api('PATCH', currentRole === 'admin' ? `/admin/support/tickets/${b.dataset.ticket}` : `/support/tickets/${b.dataset.ticket}/status`, { status, admin_note: note }));
+  });
+  document.querySelectorAll('[data-reply]').forEach((b) => b.onclick = () => run(async () => {
+    const messages = await api('GET', `/support/tickets/${b.dataset.reply}/messages`);
+    const history = messages.map((m) => `${m.author_name} (${m.author_role}): ${m.message}`).join('\n\n') || 'No replies yet.';
+    alert(history);
+    const message = prompt('Reply to this support ticket');
+    if (message && message.trim()) await api('POST', `/support/tickets/${b.dataset.reply}/messages`, { message: message.trim() });
+    await show();
+  }));
+  document.querySelectorAll('[data-refund]').forEach((b) => b.onclick = () => {
+    if (!confirm('Send a refund request to Paystack for this ticket’s verified paid order?')) return;
+    run(() => api('POST', `/admin/support/tickets/${b.dataset.refund}/refund`));
+  });
+  clearInterval(timer); timer = setInterval(() => { if (tab === 'support') show(); }, 10000);
+}
+
+render();
+</script></body></html>
