@@ -1,0 +1,9 @@
+<style>
+#splash{position:fixed;inset:0;background:#FAF9F6;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;color:#0B5D47;z-index:9999}
+#splash h1{margin:12px 0 4px;font-size:38px;font-weight:800;letter-spacing:-.7px}
+#splash p{margin:0 0 28px;font-size:15px}
+#splash .s{width:24px;height:24px;border:2.5px solid #FF7A00;border-top-color:transparent;border-radius:50%;animation:r 1s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+</style>
+<div id="splash"><h1>cönëct</h1><p>Order. Track. Receive.</p><div class="s"></div></div>
+<script>window.addEventListener('flutter-first-frame',function(){var e=document.getElementById('splash');if(e)e.remove();});</script>
