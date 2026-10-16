@@ -58,7 +58,7 @@ class _AuthScreenState extends State<AuthScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const Center(child: ConectBrandMark(size: 88)),
                 const SizedBox(height: 8),
-                Text('cönëct', textAlign: TextAlign.center, style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: cs.primary)),
+               const ConectWordmark(fontSize: 40)
                 const SizedBox(height: 4),
                 Text(awaitingVerification ? 'Verify your email' : register ? 'Create your account' : 'Sign in to order', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 24),
