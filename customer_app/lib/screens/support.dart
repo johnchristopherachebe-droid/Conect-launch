@@ -47,7 +47,7 @@ class _SupportScreenState extends State<SupportScreen> {
       if (snap.hasError) return Column(children: [Text(snap.error.toString()), TextButton(onPressed: refresh, child: const Text('Try again'))]);
       final rows = (snap.data as List).cast<Map<String, dynamic>>();
       if (rows.isEmpty) return const Padding(padding: EdgeInsets.all(16), child: Text('No support requests yet.'));
-      return Column(children: rows.map((t) => Card(child: ListTile(title: Text(t['subject'] ?? 'Support request'), subtitle: Text('${t['status']} · ${t['created_at']}'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupportThread(ticket: t))).then((_) => refresh()))).toList());
+            return Column(children: rows.map((t) => Card(child: ListTile(title: Text(t['subject'] ?? 'Support request'), subtitle: Text('${t['status']} · ${t['created_at']}'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupportThread(ticket: t))).then((_) => refresh())))).toList());
     }),
   ]));
 }
