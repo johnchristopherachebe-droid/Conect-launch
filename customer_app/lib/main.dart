@@ -13,14 +13,12 @@ class ConectApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const brand = conectGreen;
     return MaterialApp(
       title: 'Cönëct',
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: brand, secondary: conectOrange), useMaterial3: true),
-      darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: brand, secondary: conectOrange, brightness: Brightness.dark), useMaterial3: true),
+      theme: conectTheme(Brightness.light),
+      darkTheme: conectTheme(Brightness.dark),
       home: Consumer<AppState>(builder: (_, s, __) {
         if (!s.ready) return const ConectSplash();
         return s.api.token == null ? const AuthScreen() : const HomeScreen();
