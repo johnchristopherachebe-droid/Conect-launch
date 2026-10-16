@@ -87,7 +87,7 @@ class AppState extends ChangeNotifier {
   /// Opens Paystack's secure checkout page in the browser.
   Future<void> startPayment(String orderId) async {
     final r = await api.post('/orders/$orderId/pay');
-    final ok = await launchUrl(Uri.parse(r['url']), mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(Uri.parse(r['url']), mode: LaunchMode.externalApplication, webOnlyWindowName: '_self');
     if (!ok) throw ApiException('Could not open the payment page');
   }
 
