@@ -3,8 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
 import '../api.dart';
+import '../brand.dart';
 import '../state.dart';
 import 'live_map.dart';
+
+const BoxDecoration _headerBg = BoxDecoration(
+  gradient: LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF0B0615), Color(0xFF3B1480)],
+  ),
+);
 
 const _steps = {
   'placed': 'Order received',
@@ -39,6 +48,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
     super.dispose();
   }
 
+  String get _shortId {
+    final id = widget.orderId;
+    return '#${(id.length > 8 ? id.substring(0, 8) : id).toUpperCase()}';
+  }
+
   Future<void> refresh() async {
     try {
       final o = await context.read<AppState>().api.get('/orders/${widget.orderId}');
@@ -62,30 +76,182 @@ class _TrackingScreenState extends State<TrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final o = order;
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Your order')),
-      body: o == null
-          ? Center(child: error == null ? const CircularProgressIndicator() : Text(error!))
-          : ListView(padding: const EdgeInsets.all(20), children: [
-              Text(o['store_name'], style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 4),
-              Text(o['status'] == 'cancelled' ? 'This order was cancelled' : 'Total ₦${n(o['total']).toStringAsFixed(0)}'),
-              if ((o['refund_status'] ?? 'none') != 'none') Padding(padding: const EdgeInsets.only(top: 8), child: Text('Refund status: ${o['refund_status']}${o['refund_note'] != null ? ' · ${o['refund_note']}' : ''}', style: TextStyle(color: cs.secondary))),
-              const SizedBox(height: 16),
-              if (o['status'] != 'cancelled' && o['paid'] != true) _payBanner(),
-              if (o['status'] != 'cancelled' && o['paid'] == true)
-                for (final e in _steps.entries.toList().asMap().entries)
-                  _step(e.value.value, _index(o['status']) > e.key ? 2 : _index(o['status']) == e.key ? 1 : 0, cs),
-              if (_courier(o) != null && !['delivered', 'cancelled'].contains(o['status']))
-                Padding(padding: const EdgeInsets.only(top: 12), child: LiveMap(courier: _courier(o)!, destination: _dest(o))),
-              const SizedBox(height: 16),
-              for (final i in (o['items'] as List)) Text('${i['quantity']} × ${i['name']}'),
-              if (o['status'] == 'delivered' && o['paid'] == true)
-                Padding(padding: const EdgeInsets.only(top: 20), child: OutlinedButton.icon(onPressed: rateOrder, icon: const Icon(Icons.star_outline), label: const Text('Rate your order'))),
-              if (o['status'] == 'placed')
-                Padding(padding: const EdgeInsets.only(top: 24), child: OutlinedButton(onPressed: cancel, child: const Text('Cancel order'))),
+      body: Container(
+        decoration: _headerBg,
+        child: Column(children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 20, 20),
+              child: Row(children: [
+                IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.pop(context)),
+                const SizedBox(width: 4),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Track Order', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+                  Text('Order $_shortId', style: const TextStyle(color: Color(0xFFD9CCF5), fontSize: 13)),
+                ]),
+              ]),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                child: o == null
+                    ? Center(child: error == null ? const CircularProgressIndicator() : Padding(padding: const EdgeInsets.all(24), child: Text(error!)))
+                    : _content(context, o),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context, Map<String, dynamic> o) {
+    final cs = Theme.of(context).colorScheme;
+    final status = o['status'] as String;
+    final paid = o['paid'] == true;
+    final cancelled = status == 'cancelled';
+    final delivered = status == 'delivered';
+
+    IconData icon;
+    String title;
+    if (cancelled) {
+      icon = Icons.cancel_outlined;
+      title = 'Order cancelled';
+    } else if (!paid) {
+      icon = Icons.payments_outlined;
+      title = 'Waiting for payment';
+    } else if (delivered) {
+      icon = Icons.check_circle_rounded;
+      title = 'Delivered!';
+    } else if (status == 'picked_up') {
+      icon = Icons.delivery_dining_rounded;
+      title = 'Rider is on the way';
+    } else if (status == 'ready') {
+      icon = Icons.storefront_outlined;
+      title = 'Ready for pickup';
+    } else if (status == 'preparing') {
+      icon = Icons.restaurant_rounded;
+      title = 'Preparing your order';
+    } else {
+      icon = Icons.receipt_long_rounded;
+      title = 'Order received';
+    }
+    final sub = cancelled
+        ? '${o['store_name']} · this order was cancelled'
+        : '${o['store_name']} · ₦${n(o['total']).toStringAsFixed(0)}';
+
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF7C3AED), Color(0xFF4C1D95)]),
+        ),
+        child: Row(children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white24),
+            child: Icon(icon, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(sub, style: const TextStyle(color: Color(0xFFE4D9FF), fontSize: 13)),
             ]),
+          ),
+        ]),
+      ),
+      if ((o['refund_status'] ?? 'none') != 'none')
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text('Refund status: ${o['refund_status']}${o['refund_note'] != null ? ' · ${o['refund_note']}' : ''}',
+              style: TextStyle(color: cs.secondary)),
+        ),
+      const SizedBox(height: 14),
+      if (!cancelled && !paid) _payBanner(),
+      if (!cancelled && paid) _timeline(status, cs),
+      if (_courier(o) != null && !['delivered', 'cancelled'].contains(status))
+        Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: ClipRRect(borderRadius: BorderRadius.circular(20), child: LiveMap(courier: _courier(o)!, destination: _dest(o))),
+        ),
+      const SizedBox(height: 14),
+      _details(o),
+      if (delivered && paid)
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: FilledButton.icon(onPressed: rateOrder, icon: const Icon(Icons.star_rounded), label: const Text('Rate your order')),
+        ),
+      if (status == 'placed')
+        Padding(padding: const EdgeInsets.only(top: 16), child: OutlinedButton(onPressed: cancel, child: const Text('Cancel order'))),
+      const SizedBox(height: 12),
+      OutlinedButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text('Back to Home')),
+    ]);
+  }
+
+  Widget _timeline(String status, ColorScheme cs) {
+    final labels = _steps.values.toList();
+    final cur = _index(status);
+    final rows = <Widget>[];
+    for (var i = 0; i < labels.length; i++) {
+      final state = cur > i ? 2 : cur == i ? 1 : 0;
+      rows.add(_step(labels[i], state, cs));
+      if (i < labels.length - 1) {
+        rows.add(Padding(
+          padding: const EdgeInsets.only(left: 11),
+          child: Container(width: 2, height: 14, color: state == 2 ? cs.primary : cs.outlineVariant),
+        ));
+      }
+    }
+    return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: rows)));
+  }
+
+  Widget _details(Map<String, dynamic> o) {
+    final items = (o['items'] as List).cast<Map<String, dynamic>>();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Order details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 10),
+          for (final i in items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Expanded(child: Text('${i['quantity']} × ${i['name']}')),
+                Text('₦${(n(i['unit_price']) * (i['quantity'] as num)).toStringAsFixed(0)}'),
+              ]),
+            ),
+          const Divider(height: 22),
+          if (o['delivery_fee'] != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Delivery fee'),
+                Text('₦${n(o['delivery_fee']).toStringAsFixed(0)}'),
+              ]),
+            ),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Total', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            Text('₦${n(o['total']).toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: conectPurple)),
+          ]),
+        ]),
+      ),
     );
   }
 
@@ -117,8 +283,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
   Widget _payBanner() => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Waiting for payment', style: TextStyle(fontWeight: FontWeight.w800)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('Waiting for payment', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 4),
             const Text('A courier gets your order once payment is confirmed.'),
             const SizedBox(height: 12),
@@ -150,13 +316,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
   int _index(String status) => _steps.keys.toList().indexOf(status);
 
   /// state: 0 upcoming, 1 current, 2 done
-  Widget _step(String label, int state, ColorScheme cs) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(children: [
-          Icon(state == 2 ? Icons.check_circle : state == 1 ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-              color: state == 0 ? cs.outline : cs.primary),
-          const SizedBox(width: 14),
-          Text(label, style: TextStyle(fontWeight: state == 1 ? FontWeight.w800 : null, color: state == 0 ? cs.outline : null)),
-        ]),
-      );
+  Widget _step(String label, int state, ColorScheme cs) => Row(children: [
+        Icon(state == 2 ? Icons.check_circle : state == 1 ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+            size: 24, color: state == 0 ? cs.outline : cs.primary),
+        const SizedBox(width: 14),
+        Text(label, style: TextStyle(fontWeight: state == 1 ? FontWeight.w800 : null, color: state == 0 ? cs.outline : null)),
+      ]);
 }
