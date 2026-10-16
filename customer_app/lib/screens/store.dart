@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api.dart';
+import '../brand.dart';
 import '../state.dart';
 import 'home.dart' show cartBar;
+
+const BoxDecoration _headerBg = BoxDecoration(
+  gradient: LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF0B0615), Color(0xFF3B1480)],
+  ),
+);
 
 class StoreScreen extends StatefulWidget {
   final int storeId;
@@ -34,6 +43,29 @@ class _StoreScreenState extends State<StoreScreen> {
     s.change(p, 1);
   }
 
+  Widget _chip(IconData icon, String text, {Color color = const Color(0xFFD9CCF5)}) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 4),
+        Text(text, style: const TextStyle(color: Color(0xFFE4D9FF), fontSize: 12.5)),
+      ]);
+
+  Widget _stepper(AppState s, Map<String, dynamic> p, int q) => Container(
+        decoration: BoxDecoration(color: conectLavender, borderRadius: BorderRadius.circular(22)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Remove one',
+              icon: const Icon(Icons.remove_rounded, color: conectPurple),
+              onPressed: () => s.change(p, -1)),
+          Text('$q', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2A0F55), fontSize: 16)),
+          IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Add one',
+              icon: const Icon(Icons.add_rounded, color: conectPurple),
+              onPressed: () => s.change(p, 1)),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
@@ -44,34 +76,108 @@ class _StoreScreenState extends State<StoreScreen> {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
         if (snap.hasError) {
-          return Scaffold(appBar: AppBar(), body: Center(child: Text(snap.error is ApiException ? snap.error.toString() : 'Could not load this store')));
+          return Scaffold(
+              appBar: AppBar(),
+              body: Center(child: Text(snap.error is ApiException ? snap.error.toString() : 'Could not load this store')));
         }
         final st = snap.data as Map<String, dynamic>;
         final products = (st['products'] as List).cast<Map<String, dynamic>>();
+        final num ratings = (st['rating_count'] as num?) ?? 0;
         return Scaffold(
-          appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [Text('${st['emoji'] ?? ''} ${st['name']}'), if ((st['rating_count'] as num? ?? 0) > 0) Text('★ ${st['average_rating']} · ${st['rating_count']} ratings', style: Theme.of(context).textTheme.labelSmall)])),
-          body: ListView.separated(
-            itemCount: products.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final p = products[i];
-              final q = s.qty(p['id']);
-              return ListTile(
-                title: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text('₦${n(p['price']).toStringAsFixed(0)}'),
-                trailing: q == 0
-                    ? FilledButton.tonal(onPressed: () => add(st, p), child: const Text('Add'))
-                    : Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(tooltip: 'Remove one', icon: const Icon(Icons.remove_circle_outline), onPressed: () => s.change(p, -1)),
-                        Text('$q', style: const TextStyle(fontWeight: FontWeight.w800)),
-                        IconButton(tooltip: 'Add one', icon: const Icon(Icons.add_circle_outline), onPressed: () => s.change(p, 1)),
+          body: Container(
+            decoration: _headerBg,
+            child: Column(children: [
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 20, 20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                        onPressed: () => Navigator.pop(context)),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Row(children: [
+                        Container(
+                          width: 68,
+                          height: 68,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(color: conectLavender, borderRadius: BorderRadius.circular(20)),
+                          child: Text(st['emoji'] ?? '🏪', style: const TextStyle(fontSize: 34)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(st['name'],
+                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 6),
+                            Wrap(spacing: 14, runSpacing: 4, children: [
+                              _chip(Icons.star_rounded, ratings > 0 ? '${st['average_rating']} (${ratings.toInt()})' : 'New',
+                                  color: conectOrange),
+                              _chip(Icons.schedule_rounded, '${st['eta_minutes']} min'),
+                              _chip(Icons.delivery_dining_rounded, 'Distance-based delivery'),
+                            ]),
+                          ]),
+                        ),
                       ]),
-              );
-            },
+                    ),
+                  ]),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                      children: [
+                        const Text('Menu', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 12),
+                        if (products.isEmpty)
+                          const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No items available yet.'))),
+                        for (final p in products) _productCard(context, s, st, p),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ]),
           ),
           bottomNavigationBar: s.count == 0 ? null : cartBar(context, s),
         );
       },
+    );
+  }
+
+  Widget _productCard(BuildContext context, AppState s, Map<String, dynamic> st, Map<String, dynamic> p) {
+    final q = s.qty(p['id']);
+    final unavailable = p['available'] == false;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('₦${n(p['price']).toStringAsFixed(0)}',
+                  style: const TextStyle(color: conectPurple, fontWeight: FontWeight.w800, fontSize: 15)),
+            ]),
+          ),
+          if (unavailable)
+            Text('Unavailable', style: TextStyle(color: Theme.of(context).hintColor))
+          else if (q == 0)
+            IconButton.filled(tooltip: 'Add', icon: const Icon(Icons.add_rounded), onPressed: () => add(st, p))
+          else
+            _stepper(s, p, q),
+        ]),
+      ),
     );
   }
 }
