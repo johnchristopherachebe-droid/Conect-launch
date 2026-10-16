@@ -2,7 +2,7 @@ FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 COPY . .
 ARG API_URL
-RUN flutter create --platforms web . && flutter pub get && flutter build web --release --dart-define=API_URL=$API_URL
+RUN flutter create --platforms web . && sed -i '/<body>/r splash.html' web/index.html && flutter pub get && flutter build web --release --dart-define=API_URL=$API_URL
 
 FROM nginx:alpine
 COPY --from=build /app/build/web /usr/share/nginx/html
