@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final s = context.watch<AppState>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cönëct', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const ConectWordmark(fontSize: 24),
         actions: [
           IconButton(tooltip: 'Refresh nearby stores', icon: const Icon(Icons.my_location), onPressed: locate),
           IconButton(tooltip: 'My orders', icon: const Icon(Icons.receipt_long),
