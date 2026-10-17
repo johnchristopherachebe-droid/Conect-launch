@@ -174,6 +174,35 @@ class _JobsScreenState extends State<JobsScreen> {
       ]),
     );
   }
+  Future<void> confirmDelivery(Map<String, dynamic> o) async {
+    final pin = TextEditingController();
+    final entered = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm delivery'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Ask the customer for their 4-digit delivery PIN.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: pin,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 8),
+            decoration: const InputDecoration(counterText: '', hintText: '••••'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, pin.text.trim()), child: const Text('Confirm')),
+        ],
+      ),
+    );
+    if (entered == null) return;
+    if (!RegExp(r'^\d{4}$').hasMatch(entered)) return toast('Enter the 4-digit PIN.');
+    await act('/courier/orders/${o['id']}/advance', {'pin': entered});
+  }
 
   Widget _pill(String text, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
