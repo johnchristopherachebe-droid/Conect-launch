@@ -756,6 +756,8 @@ app.post('/courier/orders/:id/accept', requireAuth('courier'), approvedCourier, 
   notifyUser(rows[0].customer_id, 'Courier assigned', 'A courier accepted your order.', { orderId: rows[0].id });
   res.json(rows[0]);
 }));
+import { registerDeliveryPin } from './delivery-pin.js';
+registerDeliveryPin(app, { approvedCourier });
 
 const NEXT = { ready: 'picked_up', picked_up: 'delivered' };
 
