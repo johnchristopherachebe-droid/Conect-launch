@@ -8,6 +8,7 @@ import 'brand.dart';
 import 'main.dart' show api;
 import 'push.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'application.dart';
 
 const _nextLabel = {
   'ready': 'Mark as picked up',
@@ -136,7 +137,7 @@ class _JobsScreenState extends State<JobsScreen> {
       );
     }
     if (profileData!['approved'] != true) {
-      return CourierOnboarding(profileData: profileData!, onSaved: refresh);
+        return CourierApplication(profileData: profileData!, onSaved: refresh);
     }
     return RefreshIndicator(
       onRefresh: refresh,
