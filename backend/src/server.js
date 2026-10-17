@@ -758,6 +758,8 @@ app.post('/courier/orders/:id/accept', requireAuth('courier'), approvedCourier, 
 }));
 import { registerDeliveryPin } from './delivery-pin.js';
 registerDeliveryPin(app, { approvedCourier });
+import { registerExtras } from './extras.js';
+registerExtras(app, { approvedCourier, approvedVendor });
 
 const NEXT = { ready: 'picked_up', picked_up: 'delivered' };
 
