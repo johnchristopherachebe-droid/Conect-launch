@@ -6,6 +6,7 @@ import '../api.dart';
 import '../brand.dart';
 import '../state.dart';
 import 'live_map.dart';
+import 'delivery_pin_card.dart';
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -183,6 +184,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         ),
       const SizedBox(height: 14),
       if (!cancelled && !paid) _payBanner(),
+      if (!cancelled && !delivered && paid) DeliveryPinCard(orderId: widget.orderId),
       if (!cancelled && paid) _timeline(status, cs),
       if (_courier(o) != null && !['delivered', 'cancelled'].contains(status))
         Padding(
