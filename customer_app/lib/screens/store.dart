@@ -4,6 +4,7 @@ import '../api.dart';
 import '../brand.dart';
 import '../state.dart';
 import 'home.dart' show cartBar;
+import 'product_image.dart';
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -161,7 +162,8 @@ class _StoreScreenState extends State<StoreScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-        child: Row(children: [
+        child: Row(children: [          ProductImage(productId: p['id'], size: 64),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
