@@ -183,7 +183,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               style: TextStyle(color: cs.secondary)),
         ),
       const SizedBox(height: 14),
-      if (!cancelled && !paid) _payBanner(),
+            if (!cancelled && !paid) _payBanner(),
       if (!cancelled && !delivered && paid) DeliveryPinCard(orderId: widget.orderId),
       if (!cancelled && paid) _timeline(status, cs),
       if (_courier(o) != null && !['delivered', 'cancelled'].contains(status))
