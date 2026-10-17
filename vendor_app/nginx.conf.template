@@ -1,5 +1,6 @@
 server {
   listen ${PORT};
   root /usr/share/nginx/html;
+  add_header Cache-Control "no-cache";
   location / { try_files $uri $uri/ /index.html; }
 }
