@@ -5,6 +5,7 @@ import 'push.dart';
 import 'screens/auth.dart';
 import 'screens/home.dart';
 import 'brand.dart';
+import 'screens/onboarding.dart';
 
 void main() => runApp(ChangeNotifierProvider(create: (_) => AppState()..init(), child: const ConectApp()));
 
@@ -21,7 +22,7 @@ class ConectApp extends StatelessWidget {
       darkTheme: conectTheme(Brightness.dark),
       home: Consumer<AppState>(builder: (_, s, __) {
         if (!s.ready) return const ConectSplash();
-        return s.api.token == null ? const AuthScreen() : const HomeScreen();
+        return s.api.token == null ? const FirstRunGate(child: AuthScreen()) : const HomeScreen();
       }),
     );
   }
