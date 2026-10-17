@@ -280,6 +280,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
   bool busy = true;
   String error = '';
   int tab = 0;
+  int imgVersion = 0;
   Timer? timer;
   String bizType = 'food';
   final name = TextEditingController(),
@@ -428,6 +429,28 @@ class _VendorDashboardState extends State<VendorDashboard> {
       await widget.api.send('PATCH', '/vendor/orders/${order['id']}/status', {'status': status});
       await load();
       msg(status == 'preparing' ? 'Order marked as preparing.' : 'Order marked ready for courier pickup.');
+    } catch (e) {
+      msg(cleanError(e));
+    }
+  }
+  Future<void> uploadProductImage(dynamic p) async {
+    try {
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.custom, allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'], withData: true);
+      if (result == null) return;
+      final bytes = result.files.single.bytes;
+      if (bytes == null || bytes.isEmpty) throw Exception('Could not read the selected photo.');
+      msg('Preparing photo…');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) throw Exception('That file is not a supported image. Use JPG, PNG or WebP.');
+      final upright = img.bakeOrientation(decoded);
+      final small = upright.width > 900 ? img.copyResize(upright, width: 900) : upright;
+      final jpg = img.encodeJpg(small, quality: 82);
+      await widget.api.send('POST', '/vendor/products/${p['id']}/image',
+          {'mime_type': 'image/jpeg', 'data_base64': base64Encode(jpg)});
+      if (mounted) setState(() => imgVersion++);
+      msg('Photo saved.');
     } catch (e) {
       msg(cleanError(e));
     }
@@ -601,15 +624,36 @@ class _VendorDashboardState extends State<VendorDashboard> {
         const Text('Your products', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
         const SizedBox(height: 8),
         if (products.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No products yet.')),
-        for (final p in products)
+                for (final p in products)
           Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+              leading: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => uploadProductImage(p),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Image.network(
+                      '$apiUrl/products/${p['id']}/image?v=$imgVersion',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: conectLavender,
+                        child: const Icon(Icons.add_a_photo_outlined, color: conectPurple),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               title: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text(naira(p['price']), style: const TextStyle(color: conectPurple, fontWeight: FontWeight.w700)),
               trailing: Switch(value: p['available'] == true, onChanged: (v) => setProductAvailable(p, v)),
             ),
           ),
+
       ]);
 
   Widget _storeTab() {
