@@ -33,13 +33,12 @@ class _CourierAppState extends State<CourierApp> {
 
   @override
   Widget build(BuildContext context) {
-    const brand = conectGreen;
     return MaterialApp(
       title: 'Cönëct Courier',
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: brand, secondary: conectOrange), useMaterial3: true),
-      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: brand, secondary: conectOrange, brightness: Brightness.dark), useMaterial3: true),
+      theme: conectTheme(Brightness.light),
+      darkTheme: conectTheme(Brightness.dark),
       home: signedIn ? JobsScreen(onSignOut: signOut) : AuthScreen(onDone: () => setState(() {})),
     );
   }
