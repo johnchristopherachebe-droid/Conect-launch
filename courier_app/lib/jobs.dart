@@ -4,12 +4,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'api.dart';
+import 'brand.dart';
 import 'main.dart' show api;
 import 'push.dart';
 
 const _nextLabel = {
-  'ready': 'Picked up',
-  'picked_up': 'Delivered',
+  'ready': 'Mark as picked up',
+  'picked_up': 'Mark as delivered',
+};
+const _stageText = {
+  'ready': 'Head to the store to collect the order',
+  'picked_up': 'On the way to the customer',
 };
 
 class JobsScreen extends StatefulWidget {
@@ -49,7 +54,12 @@ class _JobsScreenState extends State<JobsScreen> {
       if (!mounted) return;
       profileData = p;
       if (p['approved'] != true) {
-        setState(() { active = []; available = []; loading = false; error = null; });
+        setState(() {
+          active = [];
+          available = [];
+          loading = false;
+          error = null;
+        });
         return;
       }
       final a = await api.get('/courier/active') as List;
@@ -64,7 +74,10 @@ class _JobsScreenState extends State<JobsScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.message == 'Sign in required') return widget.onSignOut();
-      setState(() { error = e.message; loading = false; });
+      setState(() {
+        error = e.message;
+        loading = false;
+      });
     }
   }
 
@@ -95,122 +108,306 @@ class _JobsScreenState extends State<JobsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cönëct Courier', style: TextStyle(fontWeight: FontWeight.w800)),
-        actions: [IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: widget.onSignOut)],
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : profileData == null
-              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error ?? 'Could not load your courier profile.'), const SizedBox(height: 12), FilledButton(onPressed: refresh, child: const Text('Try again'))])))
-              : profileData!['approved'] != true
-                  ? CourierOnboarding(profileData: profileData!, onSaved: () { refresh(); })
-                  : RefreshIndicator(
-              onRefresh: refresh,
-              child: ListView(padding: const EdgeInsets.all(16), children: [
-                if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Available for orders', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Shares your location so nearby orders can be offered to you.'),
-                  value: online,
-                  onChanged: (v) {
-                    setState(() => online = v);
-                    if (v) sendLocation();
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text('Your deliveries', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (active.isEmpty) const Text('Nothing in progress. Accept an order below.'),
-                for (final o in active)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(o['store_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 4),
-                        if ((o['pickup_address'] ?? '').toString().trim().isNotEmpty)
-                          Text('Pick up from: ${o['pickup_address']}'),
-                        if (o['pickup_lat'] != null && o['pickup_lng'] != null)
-                          Text('Pickup GPS: ${o['pickup_lat']}, ${o['pickup_lng']}'),
-                        Text('Deliver to ${o['label']}: ${o['line1']}, ${o['city']}'),
-                        Text('Customer phone: ${(o['customer_phone'] ?? '').toString().trim().isEmpty ? 'Not provided' : o['customer_phone']}'),
-                        Text('Status: ${o['status'].toString().replaceAll('_', ' ')}'),
-                        const SizedBox(height: 12),
-                        FilledButton(onPressed: () => act('/courier/orders/${o['id']}/advance'), child: Text(_nextLabel[o['status']] ?? 'Next')),
-                      ]),
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                Text('Available orders', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (available.isEmpty) const Text('No orders waiting. This list refreshes by itself.'),
-                for (final o in available)
-                  Card(
-                    child: ListTile(
-                      title: Text(o['store_name'], style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('Pick up: ${(o['pickup_address'] ?? o['store_name']).toString()} · Deliver: ${o['line1']}, ${o['city']} · fee ₦${n(o['delivery_fee']).toStringAsFixed(0)}'),
-                      trailing: FilledButton.tonal(onPressed: () => act('/courier/orders/${o['id']}/accept'), child: const Text('Accept')),
-                    ),
-                  ),
-              ]),
-            ),
+    final approved = profileData?['approved'] == true;
+    return GradientPage(
+      title: approved ? 'Deliveries' : 'Courier application',
+      subtitle: approved ? (online ? 'You’re online' : 'You’re offline') : 'Pending verification',
+      actions: [
+        IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded, color: Colors.white), onPressed: refresh),
+        IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout, color: Colors.white), onPressed: widget.onSignOut),
+      ],
+      child: _body(context),
     );
   }
-}
 
+  Widget _body(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (profileData == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(error ?? 'Could not load your courier profile.', textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: refresh, child: const Text('Try again')),
+          ]),
+        ),
+      );
+    }
+    if (profileData!['approved'] != true) {
+      return CourierOnboarding(profileData: profileData!, onSaved: refresh);
+    }
+    return RefreshIndicator(
+      onRefresh: refresh,
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        Card(
+          child: SwitchListTile(
+            secondary: Icon(online ? Icons.wifi_tethering : Icons.wifi_tethering_off,
+                color: online ? const Color(0xFF16A34A) : Theme.of(context).hintColor),
+            title: Text(online ? 'You’re online' : 'You’re offline', style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Shares your location so nearby orders can be offered to you.'),
+            value: online,
+            onChanged: (v) {
+              setState(() => online = v);
+              if (v) sendLocation();
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text('Your deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        if (active.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nothing in progress. Accept an order below.')),
+        for (final o in active) _activeCard(o),
+        const SizedBox(height: 16),
+        const Text('Available orders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        if (available.isEmpty)
+          const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8), child: Text('No orders waiting. This list refreshes by itself.')),
+        for (final o in available) _availableCard(o),
+      ]),
+    );
+  }
+
+  Widget _pill(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(color: color.withValues(alpha: .14), borderRadius: BorderRadius.circular(20)),
+        child: Text(text, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+      );
+
+  Widget _line(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, size: 18, color: conectPurple),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text)),
+        ]),
+      );
+
+  Widget _activeCard(Map<String, dynamic> o) {
+    final status = o['status'].toString();
+    final pickup = (o['pickup_address'] ?? '').toString().trim();
+    final phone = (o['customer_phone'] ?? '').toString().trim();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+            _pill(status.replaceAll('_', ' '), conectPurple),
+          ]),
+          const SizedBox(height: 4),
+          Text(_stageText[status] ?? '', style: TextStyle(color: Theme.of(context).hintColor)),
+          const SizedBox(height: 12),
+          _line(Icons.storefront_outlined, pickup.isEmpty ? 'Pickup address not provided' : pickup),
+          if (o['pickup_lat'] != null && o['pickup_lng'] != null)
+            _line(Icons.my_location, '${o['pickup_lat']}, ${o['pickup_lng']}'),
+          _line(Icons.location_on_outlined, '${o['label']}: ${o['line1']}, ${o['city']}'),
+          _line(Icons.phone_outlined, phone.isEmpty ? 'Customer phone not provided' : phone),
+          const SizedBox(height: 14),
+          FilledButton(
+            onPressed: () => act('/courier/orders/${o['id']}/advance'),
+            child: Text(_nextLabel[status] ?? 'Next'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _availableCard(Map<String, dynamic> o) => Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+              _pill('₦${n(o['delivery_fee']).toStringAsFixed(0)}', conectOrange),
+            ]),
+            const SizedBox(height: 8),
+            _line(Icons.storefront_outlined, 'Pick up: ${(o['pickup_address'] ?? o['store_name']).toString()}'),
+            _line(Icons.location_on_outlined, 'Deliver: ${o['line1']}, ${o['city']}'),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: () => act('/courier/orders/${o['id']}/accept'), child: const Text('Accept order')),
+          ]),
+        ),
+      );
+}
 
 class CourierOnboarding extends StatefulWidget {
   final Map<String, dynamic> profileData;
   final VoidCallback onSaved;
   const CourierOnboarding({super.key, required this.profileData, required this.onSaved});
-  @override State<CourierOnboarding> createState() => _CourierOnboardingState();
+  @override
+  State<CourierOnboarding> createState() => _CourierOnboardingState();
 }
+
 class _CourierOnboardingState extends State<CourierOnboarding> {
   final phone = TextEditingController(), address = TextEditingController(), license = TextEditingController();
-  String vehicle = 'motorcycle'; bool saving = false;
-  @override void initState() { super.initState(); _fill(); }
-  void _fill() { final p=widget.profileData['profile']; if(p is Map) { phone.text=p['phone']??''; address.text=p['address']??''; license.text=p['license_number']??''; vehicle=p['vehicle_type']??'motorcycle'; } }
-  @override void didUpdateWidget(covariant CourierOnboarding oldWidget) { super.didUpdateWidget(oldWidget); if(oldWidget.profileData['profile'] == null && widget.profileData['profile'] != null) _fill(); }
+  String vehicle = 'motorcycle';
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fill();
+  }
+
+  @override
+  void dispose() {
+    phone.dispose();
+    address.dispose();
+    license.dispose();
+    super.dispose();
+  }
+
+  void _fill() {
+    final p = widget.profileData['profile'];
+    if (p is Map) {
+      phone.text = p['phone'] ?? '';
+      address.text = p['address'] ?? '';
+      license.text = p['license_number'] ?? '';
+      vehicle = p['vehicle_type'] ?? 'motorcycle';
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CourierOnboarding oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profileData['profile'] == null && widget.profileData['profile'] != null) _fill();
+  }
+
   void toast(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
   Future<void> saveProfile() async {
-    if(phone.text.trim().length<7 || address.text.trim().length<5) return toast('Enter a valid phone number and home address.');
-    setState(()=>saving=true);
-    try { await api.put('/courier/profile', {'phone':phone.text.trim(),'address':address.text.trim(),'vehicle_type':vehicle,'license_number':license.text.trim()}); toast('Profile saved. Upload the required verification documents next.'); widget.onSaved(); }
-    on ApiException catch(e) { toast(e.message); } finally { if(mounted)setState(()=>saving=false); }
-  }
-  Future<void> upload(String type) async {
-    if(widget.profileData['profile']==null) return toast('Save your courier profile first.');
-    setState(()=>saving=true);
+    if (phone.text.trim().length < 7 || address.text.trim().length < 5) {
+      return toast('Enter a valid phone number and home address.');
+    }
+    setState(() => saving = true);
     try {
-      final result=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['jpg','jpeg','png','pdf'],withData:true);
-      if(result==null)return; final file=result.files.single; final bytes=file.bytes;
-      if(bytes==null||bytes.isEmpty)throw ApiException('Could not read the selected file.');
-      if(bytes.length>2*1024*1024)throw ApiException('Choose a file no larger than 2 MB.');
-      final ext=(file.extension??'').toLowerCase(); final mime=ext=='pdf'?'application/pdf':ext=='png'?'image/png':'image/jpeg';
-      await api.post('/verification/documents',{'document_type':type,'filename':file.name,'mime_type':mime,'data_base64':base64Encode(bytes)});
-      toast('Document uploaded securely for review.'); widget.onSaved();
-    } on ApiException catch(e) { toast(e.message); } catch(e) { toast(e.toString().replaceFirst('Exception: ','')); } finally { if(mounted)setState(()=>saving=false); }
+      await api.put('/courier/profile', {
+        'phone': phone.text.trim(),
+        'address': address.text.trim(),
+        'vehicle_type': vehicle,
+        'license_number': license.text.trim(),
+      });
+      toast('Profile saved. Upload the required verification documents next.');
+      widget.onSaved();
+    } on ApiException catch (e) {
+      toast(e.message);
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
   }
-  @override Widget build(BuildContext context) {
-    final profile=widget.profileData['profile']; final docs=(widget.profileData['documents'] as List? ?? []).cast<Map<String,dynamic>>();
-    return ListView(padding:const EdgeInsets.all(16),children:[
-      const Icon(Icons.delivery_dining,size:52), const SizedBox(height:8), const Text('Complete courier verification',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-      const Text('You cannot receive delivery jobs until your profile, required documents and in-person orientation are approved.'),
-      const SizedBox(height:16), Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-        TextField(controller:phone,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Phone number')),
-        TextField(controller:address,minLines:2,maxLines:3,decoration:const InputDecoration(labelText:'Home address')),
-        DropdownButtonFormField<String>(value:vehicle,decoration:const InputDecoration(labelText:'Delivery vehicle'),items:const [DropdownMenuItem(value:'bicycle',child:Text('Bicycle')),DropdownMenuItem(value:'motorcycle',child:Text('Motorcycle')),DropdownMenuItem(value:'car',child:Text('Car')),DropdownMenuItem(value:'other',child:Text('Other'))],onChanged:(v)=>setState(()=>vehicle=v??'motorcycle')),
-        TextField(controller:license,decoration:const InputDecoration(labelText:'Driving licence number (if applicable)')),
-        const SizedBox(height:12),FilledButton(onPressed:saving?null:saveProfile,child:Text(saving?'Please wait…':'Save courier profile')),
-      ]))),
-      const SizedBox(height:12), const Text('Verification documents · JPG, PNG or PDF · 2 MB maximum',style:TextStyle(fontWeight:FontWeight.bold)),
-      Wrap(spacing:8,runSpacing:8,children:[OutlinedButton.icon(onPressed:saving?null:()=>upload('government_id'),icon:const Icon(Icons.badge_outlined),label:const Text('Government ID')),if(vehicle=='motorcycle'||vehicle=='car')OutlinedButton.icon(onPressed:saving?null:()=>upload('driving_license'),icon:const Icon(Icons.credit_card),label:const Text('Driving licence')),if(vehicle=='motorcycle'||vehicle=='car')OutlinedButton.icon(onPressed:saving?null:()=>upload('vehicle_registration'),icon:const Icon(Icons.directions_bike),label:const Text('Vehicle registration'))]),
-      if(profile==null)const Text('Save your profile before uploading documents.'),
-      ...docs.map((d)=>ListTile(dense:true,leading:const Icon(Icons.description_outlined),title:Text(d['document_type'].toString().replaceAll('_',' ')),subtitle:Text('${d['filename']} · ${d['review_status']}'))),
-      const SizedBox(height:8),OutlinedButton.icon(onPressed:widget.onSaved,icon:const Icon(Icons.refresh),label:const Text('Refresh verification status')),
+
+  Future<void> upload(String type) async {
+    if (widget.profileData['profile'] == null) return toast('Save your courier profile first.');
+    setState(() => saving = true);
+    try {
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.custom, allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'], withData: true);
+      if (result == null) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) throw ApiException('Could not read the selected file.');
+      if (bytes.length > 2 * 1024 * 1024) throw ApiException('Choose a file no larger than 2 MB.');
+      final ext = (file.extension ?? '').toLowerCase();
+      final mime = ext == 'pdf' ? 'application/pdf' : ext == 'png' ? 'image/png' : 'image/jpeg';
+      await api.post('/verification/documents',
+          {'document_type': type, 'filename': file.name, 'mime_type': mime, 'data_base64': base64Encode(bytes)});
+      toast('Document uploaded securely for review.');
+      widget.onSaved();
+    } on ApiException catch (e) {
+      toast(e.message);
+    } catch (e) {
+      toast(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profileData['profile'];
+    final docs = (widget.profileData['documents'] as List? ?? []).cast<Map<String, dynamic>>();
+    final needsVehicleDocs = vehicle == 'motorcycle' || vehicle == 'car';
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
+      const Text('Complete courier verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 4),
+      Text('You can’t receive delivery jobs until your profile, required documents and in-person orientation are approved.',
+          style: TextStyle(color: Theme.of(context).hintColor)),
+      const SizedBox(height: 16),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number')),
+            const SizedBox(height: 12),
+            TextField(controller: address, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Home address')),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: vehicle,
+              decoration: const InputDecoration(labelText: 'Delivery vehicle'),
+              items: const [
+                DropdownMenuItem(value: 'bicycle', child: Text('Bicycle')),
+                DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
+                DropdownMenuItem(value: 'car', child: Text('Car')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (v) => setState(() => vehicle = v ?? 'motorcycle'),
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: license, decoration: const InputDecoration(labelText: 'Driving licence number (if applicable)')),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: saving ? null : saveProfile, child: Text(saving ? 'Please wait…' : 'Save courier profile')),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('Verification documents', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+            const SizedBox(height: 4),
+            const Text('JPG, PNG or PDF, up to 2 MB each.'),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              OutlinedButton.icon(
+                  onPressed: saving ? null : () => upload('government_id'),
+                  icon: const Icon(Icons.badge_outlined),
+                  label: const Text('Government ID')),
+              if (needsVehicleDocs)
+                OutlinedButton.icon(
+                    onPressed: saving ? null : () => upload('driving_license'),
+                    icon: const Icon(Icons.credit_card),
+                    label: const Text('Driving licence')),
+              if (needsVehicleDocs)
+                OutlinedButton.icon(
+                    onPressed: saving ? null : () => upload('vehicle_registration'),
+                    icon: const Icon(Icons.directions_bike),
+                    label: const Text('Vehicle registration')),
+            ]),
+            if (profile == null) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Save your profile before uploading documents.')),
+            for (final d in docs)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.description_outlined, color: conectPurple),
+                title: Text(d['document_type'].toString().replaceAll('_', ' ')),
+                subtitle: Text('${d['filename']} · ${d['review_status']}'),
+              ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(onPressed: widget.onSaved, icon: const Icon(Icons.refresh), label: const Text('Refresh verification status')),
     ]);
   }
 }
