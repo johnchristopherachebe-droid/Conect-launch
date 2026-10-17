@@ -301,8 +301,7 @@ class _JobsScreenState extends State<JobsScreen> {
           _line(Icons.storefront_outlined, pickup.isEmpty ? 'Pickup address not provided' : pickup),
           if (o['pickup_lat'] != null && o['pickup_lng'] != null)
             _line(Icons.my_location, '${o['pickup_lat']}, ${o['pickup_lng']}'),
-          _line(Icons.location_on_outlined, '${o['label']}: ${o['line1']}, ${o['city']}'),
-          _line(Icons.phone_outlined, phone.isEmpty ? 'Customer phone not provided' : phone),
+                    _customerBlock(o),
           const SizedBox(height: 14),
           FilledButton(
             onPressed: () => status == 'picked_up' ? confirmDelivery(o) : act('/courier/orders/${o['id']}/advance'),
