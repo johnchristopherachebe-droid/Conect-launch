@@ -5,6 +5,7 @@ import 'auth.dart';
 import 'jobs.dart';
 import 'push.dart';
 import 'brand.dart';
+import 'onboarding.dart';
 
 final api = Api();
 
@@ -39,7 +40,7 @@ class _CourierAppState extends State<CourierApp> {
       debugShowCheckedModeBanner: false,
       theme: conectTheme(Brightness.light),
       darkTheme: conectTheme(Brightness.dark),
-      home: signedIn ? JobsScreen(onSignOut: signOut) : AuthScreen(onDone: () => setState(() {})),
+            home: signedIn ? JobsScreen(onSignOut: signOut) : FirstRunGate(child: AuthScreen(onDone: () => setState(() {}))),
     );
   }
 }
