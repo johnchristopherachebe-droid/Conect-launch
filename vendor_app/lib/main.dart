@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'brand.dart';
+import 'package:image/image.dart' as img;
 
 final String apiUrl =
     const String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000').replaceAll(RegExp(r'/+$'), '');
