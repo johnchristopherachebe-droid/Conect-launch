@@ -7,6 +7,7 @@ import 'api.dart';
 import 'brand.dart';
 import 'main.dart' show api;
 import 'push.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const _nextLabel = {
   'ready': 'Mark as picked up',
@@ -202,6 +203,68 @@ class _JobsScreenState extends State<JobsScreen> {
     if (entered == null) return;
     if (!RegExp(r'^\d{4}$').hasMatch(entered)) return toast('Enter the 4-digit PIN.');
     await act('/courier/orders/${o['id']}/advance', {'pin': entered});
+  }
+  Future<void> _open(String url) async {
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && mounted) toast('Could not open that on this device.');
+  }
+
+  Widget _customerBlock(Map<String, dynamic> o) {
+    const dark = Color(0xFF1B1030);
+    final name = (o['customer_name'] ?? 'Customer').toString();
+    final phone = (o['customer_phone'] ?? '').toString().trim();
+    final note = (o['delivery_note'] ?? '').toString().trim();
+    final hasGps = o['dropoff_lat'] != null && o['dropoff_lng'] != null;
+    final small = OutlinedButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 14));
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: conectLavender, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('CUSTOMER',
+            style: TextStyle(fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w800, color: conectPurple)),
+        const SizedBox(height: 4),
+        Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: dark)),
+        const SizedBox(height: 10),
+        Row(children: [
+          const Icon(Icons.phone_outlined, size: 18, color: conectPurple),
+          const SizedBox(width: 8),
+          Expanded(child: Text(phone.isEmpty ? 'No phone number given' : phone, style: const TextStyle(color: dark))),
+          if (phone.isNotEmpty)
+            OutlinedButton.icon(
+              style: small,
+              onPressed: () => _open('tel:${phone.replaceAll(RegExp(r'[^0-9+]'), '')}'),
+              icon: const Icon(Icons.call, size: 18),
+              label: const Text('Call'),
+            ),
+        ]),
+        const SizedBox(height: 10),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.location_on_outlined, size: 18, color: conectPurple),
+          const SizedBox(width: 8),
+          Expanded(child: Text('${o['label']}: ${o['line1']}, ${o['city']}', style: const TextStyle(color: dark))),
+          if (hasGps)
+            OutlinedButton.icon(
+              style: small,
+              onPressed: () => _open(
+                  'https://www.google.com/maps/dir/?api=1&destination=${o['dropoff_lat']},${o['dropoff_lng']}&travelmode=driving'),
+              icon: const Icon(Icons.navigation_outlined, size: 18),
+              label: const Text('Navigate'),
+            ),
+        ]),
+        if (note.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.sticky_note_2_outlined, size: 18, color: conectPurple),
+            const SizedBox(width: 8),
+            Expanded(child: Text(note, style: const TextStyle(color: dark, fontStyle: FontStyle.italic))),
+          ]),
+        ],
+        const SizedBox(height: 10),
+        const Text('The customer has a 4-digit PIN. Ask for it when you hand over the order.',
+            style: TextStyle(fontSize: 12, color: dark)),
+      ]),
+    );
   }
 
   Widget _pill(String text, Color color) => Container(
