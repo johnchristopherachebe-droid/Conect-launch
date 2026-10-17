@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api.dart';
 import '../state.dart';
 import 'tracking.dart';
+import 'delivery_contact.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -17,6 +18,7 @@ class _CartScreenState extends State<CartScreen> {
   num? quotedFee;
   bool busy = false, quoteLoading = false;
   String? quoteError;
+  final phoneCtl = TextEditingController(), noteCtl = TextEditingController();
 
   Future<void> quoteFor(String id) async {
     setState(() { quoteLoading = true; quotedFee = null; quoteError = null; });
@@ -83,9 +85,16 @@ class _CartScreenState extends State<CartScreen> {
   Future<void> place() async {
     if (addressId == null) return toast('Choose a delivery address first');
     if (quotedFee == null || quoteError != null || quoteLoading) return toast('Confirm delivery coverage with a GPS-enabled address before placing the order.');
+        final phone = phoneCtl.text.trim();
+    if (phone.replaceAll(RegExp(r'\D'), '').length < 7) return toast('Enter a phone number your rider can call.');
     setState(() => busy = true);
     try {
       final o = await context.read<AppState>().placeOrder(addressId!);
+      final client = context.read<AppState>().api;
+      try { await client.post('/me/phone', {'phone': phone}); } catch (_) {}
+      if (noteCtl.text.trim().isNotEmpty) {
+        try { await client.post('/orders/${o['id']}/delivery-note', {'note': noteCtl.text.trim()}); } catch (_) {}
+      }
       try {
         await context.read<AppState>().startPayment(o['id']);
       } catch (_) {
@@ -117,6 +126,8 @@ class _CartScreenState extends State<CartScreen> {
               const Divider(),
               _row('Delivery', quotedFee ?? s.fee),
               _row('Total', s.subtotal + (quotedFee ?? s.fee), bold: true),
+      DeliveryContactCard(phone: phoneCtl, note: noteCtl),
+      const SizedBox(height: 12),
               const SizedBox(height: 16),
               Text('Deliver to', style: Theme.of(context).textTheme.titleMedium),
               FutureBuilder(
