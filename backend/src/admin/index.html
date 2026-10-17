@@ -3,17 +3,65 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cönëct Admin</title>
 <style>
-:root{color-scheme:light dark;--brand:#0B5D47;--accent:#FF7A00;--line:#8884}
-body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px;margin-inline:auto}
-h1{color:var(--brand);margin:0}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-nav button,button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer}
-nav button.on,button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}button[data-doc-review][data-status="rejected"]{border-color:#b33;color:#b33}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #FFD23F;outline-offset:2px}
-input,select{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}
-.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:12px 0}
-th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.err{color:#d33;min-height:1.2em}.mute{opacity:.7}
-.pill{padding:2px 8px;border-radius:99px;border:1px solid var(--line);font-size:13px}
+:root{color-scheme:light dark;--purple:#7C3AED;--deep:#2A0F55;--lav:#EDE7FB;--accent:#FF7A00;--bg:#F7F5FB;--card:#fff;--text:#1B1030;--line:#E3DBF3;--muted:#6B6280;--brand:var(--purple);--ok:#16A34A;--bad:#DC2626}
+@media (prefers-color-scheme:dark){:root{--bg:#110B1E;--card:#1C1430;--text:#F1EDFA;--line:#2E2347;--muted:#A99FC4;--lav:#2A2050}}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;background:var(--bg);color:var(--text)}
+h1,h2,h3{margin:0 0 8px}h2{font-size:20px}h3{font-size:17px;margin-top:20px}
+.top{background:linear-gradient(#0B0615,#3B1480);color:#fff;padding-top:env(safe-area-inset-top)}
+.top-in{max-width:1100px;margin:0 auto;padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brandrow{display:flex;align-items:center;gap:10px}.brandrow svg{height:34px;width:auto}
+.word{font-size:26px;font-weight:800;letter-spacing:-.6px}.word b{color:#A78BFA}
+.tag{background:var(--accent);color:#fff;font-size:11px;font-weight:800;letter-spacing:2px;padding:3px 10px;border-radius:99px}
+.tabs{max-width:1100px;margin:0 auto;padding:6px 16px 14px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;background:rgba(255,255,255,.1);color:#E4D9FF;border:0;border-radius:99px;padding:8px 16px;font-weight:600}
+.tabs button.on{background:#fff;color:var(--deep)}
+main{max-width:1100px;margin:0 auto;padding:18px 16px 40px}
+button{font:inherit;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+button:hover{border-color:var(--purple)}
+button.primary{background:var(--purple);color:#fff;border-color:var(--purple);font-weight:700}
+button.ghost{background:rgba(255,255,255,.12);color:#fff;border-color:transparent}
+button.link{background:none;border:0;color:var(--purple);padding:4px 0;font-weight:600}
+button[data-doc-review][data-status="rejected"]{border-color:var(--bad);color:var(--bad)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #FFD23F;outline-offset:2px}
+input,select,textarea{font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);max-width:100%}
+textarea{width:100%;resize:vertical}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;margin:12px 0}
+table{border-collapse:collapse;width:100%;margin:0}
+th{background:var(--lav);color:var(--deep);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+@media (prefers-color-scheme:dark){th{color:#D9CCF5}}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:flex-end}
+.err{color:var(--bad);min-height:1.2em;margin:0 0 8px}.mute{color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.pill{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;background:var(--lav);color:var(--deep);border:0;display:inline-block}
+@media (prefers-color-scheme:dark){.pill{color:#E4D9FF}}
+.pill[data-s=placed],.pill[data-s=open]{background:#FFE9D2;color:#9A4A00}
+.pill[data-s=preparing],.pill[data-s=ready],.pill[data-s=picked_up],.pill[data-s=in_progress]{background:var(--lav);color:var(--purple)}
+.pill[data-s=delivered],.pill[data-s=resolved],.pill[data-s=closed]{background:#DDF5E5;color:#0E6B31}
+.pill[data-s=cancelled],.pill[data-s=escalated]{background:#FDE0E0;color:#A11}
+.login{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;background:linear-gradient(#0B0615,#3B1480)}
+.login .brandrow{flex-direction:column;gap:8px;color:#fff}.login .brandrow svg{height:78px}.login .word{font-size:40px}
+.login-card{background:var(--card);color:var(--text);border-radius:24px;padding:26px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:12px}
+.login-card button{padding:13px}
+.stats{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.stat{flex:1;min-width:130px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+.stat b{display:block;font-size:26px;color:var(--purple)}.stat span{color:var(--muted);font-size:13px}
+.ticket{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer}
+.ticket:hover{border-color:var(--purple)}
+.ticket-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.ticket-top b{font-size:16px}.ticket p{margin:6px 0 0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ticket small{display:block;margin-top:6px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+.thread{display:flex;flex-direction:column;gap:8px;margin:12px 0;max-height:55vh;overflow-y:auto;padding:4px}
+.bubble{max-width:min(520px,85%);padding:10px 14px;border-radius:16px;background:var(--lav);color:var(--deep);align-self:flex-start}
+@media (prefers-color-scheme:dark){.bubble{color:#EDE7FB}}
+.bubble.staff{background:var(--purple);color:#fff;align-self:flex-end}
+.bubble small{display:block;opacity:.75;font-weight:700;margin-bottom:2px;font-size:12px}
+.bubble div{white-space:pre-wrap;word-break:break-word}
+.composer{display:flex;flex-direction:column;gap:8px}
 </style></head><body>
 <div id="root"></div>
 <script>
@@ -34,25 +82,32 @@ async function run(fn) { try { err = ''; await fn(); } catch (e) { err = e.messa
 
 function render() { token ? shell() : loginView(); }
 
+const LOGO = `<svg viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#A177FF"/></linearGradient><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4D9FF"/><stop offset="1" stop-color="#A177FF"/></linearGradient></defs><g fill="#A177FF"><rect x="12" y="52" width="28" height="6" rx="3"/><rect x="6" y="64" width="34" height="6" rx="3"/><rect x="14" y="76" width="26" height="6" rx="3"/><rect x="20" y="88" width="20" height="6" rx="3"/><circle cx="4" cy="66" r="3.5"/></g><circle cx="10" cy="96" r="4" fill="#7C3AED"/><path d="M121.06 102.48A38 38 0 1 1 121.06 53.52" fill="none" stroke="url(#lg1)" stroke-width="22" stroke-linecap="round"/><path d="M160 107.9A34 34 0 1 1 160 64.1" fill="none" stroke="url(#lg2)" stroke-width="20" stroke-linecap="round"/><line x1="94" y1="100" x2="150" y2="52" stroke="url(#lg2)" stroke-width="16" stroke-linecap="round"/><path d="M135 44L127 26A10 10 0 1 1 143 26Z" fill="#7C3AED"/><circle cx="135" cy="20" r="4" fill="#1A0B3A"/></svg>`;
+const WORD = '<span class="word">c<b>ö</b>nëct</span>';
+
 function loginView() {
-  $('#root').innerHTML = `<h1>Cönëct Admin</h1><p class="mute">Sign in with an admin account.</p>
-  <div class="row"><input id="em" type="email" placeholder="Email" aria-label="Email"><input id="pw" type="password" placeholder="Password" aria-label="Password">
-  <button class="primary" id="go">Sign in</button></div><p class="err" id="e"></p>`;
-  $('#go').onclick = async () => {
+  $('#root').innerHTML = `<div class="login"><div class="brandrow">${LOGO}${WORD}<span class="tag">ADMIN &amp; SUPPORT</span></div>
+  <div class="login-card"><h2>Sign in</h2><p class="mute" style="margin:0">Admin and support staff only.</p>
+  <input id="em" type="email" placeholder="Email" aria-label="Email" autocomplete="username"><input id="pw" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password">
+  <button class="primary" id="go">Sign in</button><p class="err" id="e"></p></div></div>`;
+  const go = async () => {
     try {
       const d = await api('POST', '/auth/login', { email: $('#em').value.trim(), password: $('#pw').value });
       if (!['admin','support'].includes(d.user.role)) throw new Error('This account is not an admin or support agent');
       token = d.token; currentRole = d.user.role; sessionStorage.setItem('token', token); sessionStorage.setItem('role', currentRole); render();
     } catch (e) { $('#e').textContent = e.message; token = null; }
   };
+  $('#go').onclick = go;
+  $('#pw').onkeydown = (ev) => { if (ev.key === 'Enter') go(); };
 }
 
 function shell() {
-  $('#root').innerHTML = `<header><h1>Cönëct ${currentRole === 'support' ? 'Support' : 'Admin'}</h1><button id="out">Sign out</button></header>
-  <nav class="row">${(currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','settings','support']).map((t) => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</nav>
-  <p class="err" id="e"></p><div id="view"></div>`;
+  const tabs = currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','settings','support'];
+  $('#root').innerHTML = `<div class="top"><div class="top-in"><div class="brandrow">${LOGO}${WORD}<span class="tag">${currentRole === 'support' ? 'SUPPORT' : 'ADMIN'}</span></div><button id="out" class="ghost">Sign out</button></div>
+  <nav class="tabs">${tabs.map((t) => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</nav></div>
+  <main><p class="err" id="e"></p><div id="view"></div></main>`;
   $('#out').onclick = signOut;
-  document.querySelectorAll('nav [data-t]').forEach((b) => b.onclick = () => { tab = b.dataset.t; clearInterval(timer); shell(); });
+  document.querySelectorAll('nav [data-t]').forEach((b) => b.onclick = () => { tab = b.dataset.t; openTicket = null; clearInterval(timer); shell(); });
   show();
 }
 
@@ -69,7 +124,9 @@ async function show() {
     else if (tab === 'settings' && currentRole === 'admin') await settingsView();
     else await supportView();
   } catch (x) { if ($('#e')) $('#e').textContent = x.message; }
+  decorate();
 }
+function decorate() { document.querySelectorAll('.pill').forEach((p) => { p.dataset.s = p.textContent.trim(); }); }
 
 let statusFilter = '';
 async function ordersView() {
@@ -196,28 +253,77 @@ async function settingsView() {
   $('#savecommission').onclick=()=>run(async()=>{const result=await api('PATCH','/admin/settings/commission',{commission_percent:Number($('#commission').value)});alert(`Vendor commission saved at ${result.commission_percent}%. It applies to the food subtotal on new orders.`);await settingsView();});
 }
 
+let openTicket = null;
+const TICKET_STATUSES = ['open','in_progress','escalated','resolved','closed'];
+const ticketsPath = () => currentRole === 'admin' ? '/admin/support/tickets' : '/support/tickets';
+
 async function supportView() {
-  const rows = await api('GET', currentRole === 'admin' ? '/admin/support/tickets' : '/support/tickets');
-  $('#view').innerHTML = `<div class="scroll"><table><tr><th>Created</th><th>Customer</th><th>Subject / message</th><th>Order</th><th>Status</th><th>Refund</th><th>Actions</th></tr>
-  ${rows.map((t) => `<tr><td>${esc(new Date(t.created_at).toLocaleString())}</td><td>${esc(t.customer_name)}<br>${esc(t.customer_email)}</td><td><b>${esc(t.subject)}</b><br>${esc(t.message)}</td><td>${esc(t.order_id || '-')}</td><td>${esc(t.status)}</td><td>${esc(t.refund_status)}</td><td><button data-ticket="${esc(t.id)}" data-status="${esc(t.status)}">Update status</button> <button data-reply="${esc(t.id)}">Reply / view thread</button> ${currentRole === 'admin' && t.order_id && !['requested','completed','processing'].includes(t.refund_status) ? `<button data-refund="${esc(t.id)}">Request refund</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="mute">No support tickets yet.</td></tr>'}</table></div>`;
-  document.querySelectorAll('[data-ticket]').forEach((b) => b.onclick = () => {
-    const status = prompt('Status: open, in_progress, escalated, resolved, closed', b.dataset.status); if (status === null) return;
-    const note = prompt('Admin note (optional)', '') ?? '';
-    run(() => api('PATCH', currentRole === 'admin' ? `/admin/support/tickets/${b.dataset.ticket}` : `/support/tickets/${b.dataset.ticket}/status`, { status, admin_note: note }));
+  if (openTicket) return ticketThread();
+  const rows = await api('GET', ticketsPath());
+  const active = rows.filter((t) => !['resolved','closed'].includes(t.status)).length;
+  const escalated = rows.filter((t) => t.status === 'escalated').length;
+  $('#view').innerHTML = `<div class="stats"><div class="stat"><b>${active}</b><span>Need attention</span></div><div class="stat"><b>${escalated}</b><span>Escalated</span></div><div class="stat"><b>${rows.length}</b><span>All tickets</span></div></div>
+  ${rows.map((t) => `<div class="ticket" data-open-ticket="${esc(t.id)}"><div class="ticket-top"><b>${esc(t.subject)}</b><span class="pill">${esc(t.status)}</span></div>
+  <p>${esc(t.message)}</p><small>${esc(t.customer_name)} · ${esc(t.customer_email)} · ${esc(new Date(t.created_at).toLocaleString())}${t.order_id ? ' · Order ' + esc(String(t.order_id).slice(0, 8).toUpperCase()) : ''}${t.refund_status && t.refund_status !== 'none' ? ' · Refund: ' + esc(t.refund_status) : ''}</small></div>`).join('') || '<p class="mute">No support tickets yet.</p>'}`;
+  document.querySelectorAll('[data-open-ticket]').forEach((el) => el.onclick = () => {
+    openTicket = rows.find((t) => String(t.id) === el.dataset.openTicket);
+    clearInterval(timer); show();
   });
-  document.querySelectorAll('[data-reply]').forEach((b) => b.onclick = () => run(async () => {
-    const messages = await api('GET', `/support/tickets/${b.dataset.reply}/messages`);
-    const history = messages.map((m) => `${m.author_name} (${m.author_role}): ${m.message}`).join('\n\n') || 'No replies yet.';
-    alert(history);
-    const message = prompt('Reply to this support ticket');
-    if (message && message.trim()) await api('POST', `/support/tickets/${b.dataset.reply}/messages`, { message: message.trim() });
-    await show();
-  }));
-  document.querySelectorAll('[data-refund]').forEach((b) => b.onclick = () => {
+  clearInterval(timer); timer = setInterval(() => { if (tab === 'support' && !openTicket) show(); }, 10000);
+}
+
+function bubbles(t, msgs) {
+  const first = `<div class="bubble"><small>${esc(t.customer_name)} (customer)</small><div>${esc(t.message)}</div></div>`;
+  return first + msgs.map((m) => `<div class="bubble ${m.author_role === 'customer' ? '' : 'staff'}"><small>${esc(m.author_name)} (${esc(m.author_role)})</small><div>${esc(m.message)}</div></div>`).join('');
+}
+
+async function refreshThread() {
+  const t = openTicket; if (!t) return;
+  const box = $('#th'); if (!box) return;
+  const msgs = await api('GET', `/support/tickets/${t.id}/messages`);
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  box.innerHTML = bubbles(t, msgs);
+  if (nearBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function reloadTicket() {
+  const rows = await api('GET', ticketsPath());
+  const fresh = rows.find((x) => String(x.id) === String(openTicket.id));
+  if (fresh) openTicket = fresh;
+}
+
+async function ticketThread() {
+  const t = openTicket;
+  const msgs = await api('GET', `/support/tickets/${t.id}/messages`);
+  const canRefund = currentRole === 'admin' && t.order_id && !['requested','completed','processing'].includes(t.refund_status);
+  $('#view').innerHTML = `<button class="link" id="back">← All tickets</button>
+  <div class="card"><div class="ticket-top"><h2>${esc(t.subject)}</h2><span class="pill">${esc(t.status)}</span></div>
+  <div class="mute">${esc(t.customer_name)} · ${esc(t.customer_email)} · ${esc(new Date(t.created_at).toLocaleString())}</div>
+  ${t.order_id ? `<div class="mute">Order ${esc(t.order_id)}</div>` : ''}${t.refund_status && t.refund_status !== 'none' ? `<div class="mute">Refund: ${esc(t.refund_status)}</div>` : ''}
+  <div class="row"><label>Status<br><select id="ts">${TICKET_STATUSES.map((s) => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+  <label style="flex:1;min-width:200px">Internal note<br><input id="tn" style="width:100%" placeholder="Visible to staff only" value="${esc(t.admin_note || '')}"></label>
+  <button id="tsave">Save</button>${canRefund ? '<button id="trefund">Request refund</button>' : ''}</div></div>
+  <div class="thread" id="th">${bubbles(t, msgs)}</div>
+  <div class="composer"><textarea id="rp" rows="3" placeholder="Reply to the customer"></textarea><button class="primary" id="rsend">Send reply</button></div>`;
+  const box = $('#th'); box.scrollTop = box.scrollHeight;
+  $('#back').onclick = () => { openTicket = null; clearInterval(timer); show(); };
+  $('#tsave').onclick = () => run(async () => {
+    const status = $('#ts').value, admin_note = $('#tn').value;
+    await api('PATCH', currentRole === 'admin' ? `/admin/support/tickets/${t.id}` : `/support/tickets/${t.id}/status`, { status, admin_note });
+    await reloadTicket();
+  });
+  $('#rsend').onclick = () => run(async () => {
+    const message = $('#rp').value.trim(); if (!message) return;
+    await api('POST', `/support/tickets/${t.id}/messages`, { message });
+    await reloadTicket();
+  });
+  const rf = $('#trefund');
+  if (rf) rf.onclick = () => {
     if (!confirm('Send a refund request to Paystack for this ticket’s verified paid order?')) return;
-    run(() => api('POST', `/admin/support/tickets/${b.dataset.refund}/refund`));
-  });
-  clearInterval(timer); timer = setInterval(() => { if (tab === 'support') show(); }, 10000);
+    run(async () => { await api('POST', `/admin/support/tickets/${t.id}/refund`); await reloadTicket(); });
+  };
+  clearInterval(timer);
+  timer = setInterval(() => { if (tab === 'support' && openTicket) refreshThread().catch(() => {}); }, 8000);
 }
 
 render();
