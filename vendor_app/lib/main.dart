@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'brand.dart';
 import 'package:image/image.dart' as img;
+import 'application.dart';
+import 'onboarding.dart';
 
 final String apiUrl =
     const String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000').replaceAll(RegExp(r'/+$'), '');
@@ -89,7 +91,7 @@ class _VendorGateState extends State<VendorGate> {
   @override
   Widget build(BuildContext context) {
     if (!ready) return const ConectSplash();
-    if (api.token == null) return VendorLogin(api: api, onLogin: _signedIn);
+    if (api.token == null) return FirstRunGate(child: VendorLogin(api: api, onLogin: _signedIn));
     return VendorDashboard(api: api, onSignOut: _signOut);
   }
 }
@@ -295,7 +297,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
     super.initState();
     load();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (data?['approved'] == true) load(quiet: true);
+            load(quiet: true);
     });
   }
 
@@ -483,7 +485,15 @@ class _VendorDashboardState extends State<VendorDashboard> {
   Widget build(BuildContext context) {
     if (busy) return const ConectSplash();
     final approved = data?['approved'] == true;
-    return approved ? _approvedShell(context) : _applicationShell(context);
+        return approved
+        ? _approvedShell(context)
+        : VendorApplication(
+            api: widget.api,
+            data: data ?? {},
+            documents: documents,
+            onChanged: () => load(quiet: true),
+            onSignOut: widget.onSignOut,
+          );
   }
 
   // ---------------- Approved vendor ----------------
