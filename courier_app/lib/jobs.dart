@@ -95,7 +95,7 @@ class _JobsScreenState extends State<JobsScreen> {
 
   void toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-    Future<void> act(String path, [Object? body]) async {
+      Future<void> act(String path, [Object? body]) async {
     try {
       await api.post(path, body);
       await refresh();
@@ -213,7 +213,7 @@ class _JobsScreenState extends State<JobsScreen> {
           _line(Icons.phone_outlined, phone.isEmpty ? 'Customer phone not provided' : phone),
           const SizedBox(height: 14),
           FilledButton(
-            onPressed: () => act('/courier/orders/${o['id']}/advance'),
+            onPressed: () => status == 'picked_up' ? confirmDelivery(o) : act('/courier/orders/${o['id']}/advance'),
             child: Text(_nextLabel[status] ?? 'Next'),
           ),
         ]),
