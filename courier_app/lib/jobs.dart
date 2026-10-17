@@ -95,9 +95,9 @@ class _JobsScreenState extends State<JobsScreen> {
 
   void toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  Future<void> act(String path) async {
+    Future<void> act(String path, [Object? body]) async {
     try {
-      await api.post(path);
+      await api.post(path, body);
       await refresh();
       sendLocation();
     } on ApiException catch (e) {
