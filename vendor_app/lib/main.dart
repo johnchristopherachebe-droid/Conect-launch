@@ -145,7 +145,7 @@ class _VendorLoginState extends State<VendorLogin> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Verify your email'),
-            content: Text('We sent a verification link to ${email.text.trim()}. Open it before signing in.'),
+            content: Text('We sent a verification link to ${email.text.trim()}. Open it before signing in.\n\nCan’t find it? Check your spam or junk folder and mark it “Not spam”.'),
             actions: [
               TextButton(
                 onPressed: () async {
