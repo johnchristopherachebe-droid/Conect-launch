@@ -273,3 +273,54 @@ CREATE TABLE IF NOT EXISTS app_settings (
 INSERT INTO app_settings(key,value) VALUES
  ('delivery_base_fee','300'),('delivery_per_km','180'),('delivery_min_fee','300'),('vendor_commission_percent','10')
 ON CONFLICT(key) DO NOTHING;
+-- ---------- Wallets for vendors and couriers ----------
+-- Append-only ledger. A user's balance is the SUM of their entries; entries are never edited or deleted.
+-- Positive = money owed to the user (earnings, restored holds); negative = money leaving (withdrawals, refund reversals).
+CREATE TABLE IF NOT EXISTS wallet_entries (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id),
+  order_id UUID REFERENCES orders(id),
+  withdrawal_id UUID,
+  kind TEXT NOT NULL CHECK (kind IN ('order_earning','delivery_earning','refund_reversal','refund_reversal_undo','withdrawal','withdrawal_reversal','adjustment')),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount <> 0),
+  note TEXT,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_entries_user ON wallet_entries(user_id, created_at DESC);
+-- An order can only ever pay a user once, even if the delivery step is retried.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_order_earning ON wallet_entries(user_id, order_id, kind) WHERE kind IN ('order_earning','delivery_earning');
+CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_withdrawal_entry ON wallet_entries(withdrawal_id, kind) WHERE withdrawal_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS payout_accounts (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  bank_name TEXT NOT NULL,
+  account_number TEXT NOT NULL CHECK (account_number ~ '^[0-9]{10}$'),
+  account_name TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS withdrawal_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested','paid','rejected')),
+  -- Bank details are copied at request time so a later edit cannot redirect an open payout.
+  bank_name TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  payout_reference TEXT,
+  admin_note TEXT,
+  processed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawal_requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON withdrawal_requests(user_id, created_at DESC);
+-- One open withdrawal per person keeps the admin queue simple and blocks double requests.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_withdrawal_one_open ON withdrawal_requests(user_id) WHERE status='requested';
+
+-- Courier share of the delivery fee is snapshotted per order, like commission.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_share_percent NUMERIC(5,2) NOT NULL DEFAULT 100.00;
+INSERT INTO app_settings(key,value) VALUES ('courier_share_percent','100'),('min_withdrawal','1000')
+ON CONFLICT(key) DO NOTHING;
