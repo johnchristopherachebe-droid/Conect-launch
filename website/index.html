@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cönëct – Food, groceries and errands delivered to your door</title>
+<meta name="description" content="Order food and groceries from local stores and get them delivered by a verified rider. Cönëct also lets stores and riders earn and withdraw to their bank.">
+<meta name="theme-color" content="#2A0F55">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%237C3AED'/%3E%3Ctext x='50' y='68' font-size='58' font-weight='800' text-anchor='middle' fill='white' font-family='Arial'%3Ec%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1A0B3A; --deep:#2A0F55; --purple:#7C3AED; --lav:#EDE7FB; --orange:#FF7A00; --paper:#FBFAFE; --mute:#5E5578; --line:#E4DCF5;
+  --display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif; --body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.6 var(--body);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--orange);outline-offset:3px;border-radius:6px}
+.wrap{width:min(1120px,100% - 40px);margin-inline:auto}
+h1,h2,h3{font-family:var(--display);line-height:1.04;margin:0;letter-spacing:-.02em}
+p{margin:0}
+
+/* header */
+header{position:sticky;top:0;z-index:5;background:rgba(251,250,254,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px}
+.mark{font:800 28px var(--display);letter-spacing:-.03em;text-decoration:none;color:var(--deep)}
+.mark b{color:var(--purple)}
+nav{display:flex;align-items:center;gap:26px}
+nav a{text-decoration:none;font-weight:600;color:var(--mute)}
+nav a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 26px;border-radius:14px;font:700 16px var(--body);text-decoration:none;border:2px solid transparent;cursor:pointer}
+.btn.main{background:var(--purple);color:#fff}
+.btn.main:hover{background:#6A28DB}
+.btn.alt{border-color:var(--ink);color:var(--ink)}
+.btn.alt:hover{background:var(--ink);color:#fff}
+.bar .btn{min-height:44px;padding:0 20px}
+
+/* hero */
+.hero{padding:72px 0 88px}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+h1{font-size:clamp(2.7rem,6.4vw,5.1rem);font-weight:800;color:var(--deep)}
+.lead{margin-top:22px;font-size:1.18rem;color:var(--mute);max-width:34ch}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+
+/* the memorable thing: the delivery PIN */
+.pin-card{background:linear-gradient(160deg,#0B0615,var(--deep) 70%);color:#fff;border-radius:28px;padding:30px;box-shadow:0 30px 60px -28px rgba(42,15,85,.7)}
+.pin-card .state{display:flex;align-items:center;gap:10px;font-weight:600;color:#D8CBFA}
+.dot{width:10px;height:10px;border-radius:50%;background:#4ADE80}
+.pin-card h2{font-size:1.5rem;margin:22px 0 4px}
+.pin-card p{color:#CDBDF5;font-size:.98rem}
+.digits{display:flex;gap:12px;margin:22px 0 20px}
+.digits span{flex:1;aspect-ratio:1/1.12;display:grid;place-items:center;border-radius:18px;background:var(--purple);font:800 clamp(2.4rem,6vw,3.6rem)/1 var(--display);color:#fff;transform-origin:50% 100%;animation:flip .7s cubic-bezier(.2,.8,.2,1) both}
+.digits span:nth-child(2){animation-delay:.12s}.digits span:nth-child(3){animation-delay:.24s}.digits span:nth-child(4){animation-delay:.36s;background:var(--orange)}
+@keyframes flip{from{transform:rotateX(-90deg);opacity:0}to{transform:none;opacity:1}}
+.stub{display:flex;justify-content:space-between;gap:12px;border-top:1px dashed rgba(255,255,255,.28);padding-top:16px;font-size:.95rem;color:#CDBDF5}
+.stub b{color:#fff}
+
+/* sections */
+section{padding:84px 0}
+.sec-head{max-width:640px;margin-bottom:44px}
+h2.big{font-size:clamp(2rem,4.6vw,3.2rem);font-weight:800;color:var(--deep)}
+.sec-head p{margin-top:14px;color:var(--mute);font-size:1.1rem}
+
+.things{display:grid;grid-template-columns:repeat(3,1fr);border-top:2px solid var(--ink)}
+.things > div{padding:28px 28px 32px 0}
+.things > div + div{padding-left:28px;border-left:1px solid var(--line)}
+.things h3{font-size:1.9rem;font-weight:800;margin-bottom:10px}
+.things p{color:var(--mute)}
+
+.how{background:var(--lav)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:28px;counter-reset:s}
+.steps li{counter-increment:s;position:relative;padding-top:58px}
+.steps li::before{content:counter(s);position:absolute;top:0;left:0;width:44px;height:44px;border-radius:50%;background:var(--deep);color:#fff;display:grid;place-items:center;font:800 20px var(--display)}
+.steps li:last-child::before{background:var(--orange)}
+.steps h3{font-size:1.35rem;font-weight:800;margin-bottom:6px}
+.steps p{color:var(--mute);font-size:1rem}
+
+.earn{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.panel{border-radius:26px;padding:38px}
+.panel.sell{background:var(--deep);color:#fff}
+.panel.ride{background:#fff;border:2px solid var(--ink)}
+.panel h3{font-size:2rem;font-weight:800;margin-bottom:12px}
+.panel p{margin-bottom:12px}
+.panel.sell p{color:#D8CBFA}
+.panel.ride p{color:var(--mute)}
+.panel ul{margin:16px 0 28px;padding:0;list-style:none;display:grid;gap:10px}
+.panel li{padding-left:26px;position:relative;font-weight:500}
+.panel li::before{content:"";position:absolute;left:0;top:.55em;width:12px;height:12px;border-radius:4px;background:var(--orange)}
+.panel .btn.main{background:var(--orange);color:#1A0B3A}
+.panel .btn.main:hover{background:#FF8F26}
+
+.final{padding:20px 0 96px}
+.final .box{border-radius:32px;background:var(--purple);color:#fff;padding:64px 40px;text-align:center}
+.final h2{font-size:clamp(2rem,4.8vw,3.4rem);font-weight:800;max-width:16ch;margin:0 auto 12px}
+.final p{color:#EADFFF;margin-bottom:28px}
+.final .btn{background:#fff;color:var(--deep)}
+.final .btn:hover{background:var(--lav)}
+
+footer{border-top:1px solid var(--line);padding:34px 0 44px;color:var(--mute);font-size:.95rem}
+footer .wrap{display:flex;flex-wrap:wrap;gap:14px 28px;justify-content:space-between;align-items:center}
+footer nav{gap:22px}
+footer a{color:var(--mute)}
+
+@media (max-width:900px){
+  .hero{padding:44px 0 64px}
+  .hero .wrap,.earn{grid-template-columns:1fr}
+  .things{grid-template-columns:1fr}
+  .things > div,.things > div + div{padding:24px 0;border-left:0}
+  .things > div + div{border-top:1px solid var(--line)}
+  .steps{grid-template-columns:1fr 1fr}
+  nav .hide-sm{display:none}
+  section{padding:60px 0}
+}
+@media (max-width:520px){
+  .steps{grid-template-columns:1fr}
+  .panel{padding:28px}
+  .final .box{padding:48px 22px}
+  .cta .btn{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .digits span{animation:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="mark" href="#top" aria-label="Cönëct home">c<b>ö</b>nëct</a>
+    <nav aria-label="Main">
+      <a class="hide-sm" href="#order">What you can order</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#earn">Sell or ride</a>
+      <a class="btn main" data-link="customer" href="#">Order now</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <h1>Whatever you need, at your door.</h1>
+        <p class="lead">Order food and groceries from stores near you. A verified rider brings it over, and the delivery only counts once you give them your PIN.</p>
+        <div class="cta">
+          <a class="btn main" data-link="customer" href="#">Order now</a>
+          <a class="btn alt" href="#earn">Sell or ride with us</a>
+        </div>
+      </div>
+
+      <div class="pin-card" role="img" aria-label="Example of the four digit delivery PIN shown to a customer while the rider is on the way">
+        <div class="state"><span class="dot"></span> Your rider is on the way</div>
+        <h2>Your delivery PIN</h2>
+        <p>Give this to the rider when your order arrives. No PIN, no delivery.</p>
+        <div class="digits" aria-hidden="true"><span>4</span><span>7</span><span>2</span><span>9</span></div>
+        <div class="stub"><span>Order total <b>₦3,800</b></span><span>Delivery fee <b>₦300</b></span></div>
+      </div>
+    </div>
+  </div>
+
+  <section id="order">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="big">Order from stores around you.</h2>
+        <p>Browse real menus, pay securely online and follow your rider on the map.</p>
+      </div>
+      <div class="things">
+        <div><h3>Food</h3><p>Hot meals from restaurants and kitchens near you, prepared when you order.</p></div>
+        <div><h3>Groceries</h3><p>Everyday items from local shops, picked and brought to you the same day.</p></div>
+        <div><h3>Courier</h3><p>Need something collected and delivered? A rider can carry it across town for you.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="big">From tap to doorstep.</h2>
+        <p>You can see every step in the app, and support is there if something goes wrong.</p>
+      </div>
+      <ol class="steps">
+        <li><h3>Choose and pay</h3><p>Pick a store, add items and pay securely with your card or bank transfer through Paystack.</p></li>
+        <li><h3>The store prepares it</h3><p>The store confirms your order and tells you when it is ready.</p></li>
+        <li><h3>A rider picks it up</h3><p>The nearest approved rider takes the order, and you follow them live on the map.</p></li>
+        <li><h3>Give your PIN</h3><p>Share your 4-digit PIN at the door. That is how the rider confirms you got it.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="earn">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="big">Run a store or ride? Earn with Cönëct.</h2>
+        <p>Every delivered order adds to your wallet. Withdraw to your bank account when you are ready.</p>
+      </div>
+      <div class="earn">
+        <div class="panel sell">
+          <h3>Sell on Cönëct</h3>
+          <p>Put your menu in front of customers nearby and let Cönëct handle payment and delivery.</p>
+          <ul>
+            <li>Add products with photos and set your store open or closed</li>
+            <li>Cönëct takes a small commission on food sales only, never on delivery</li>
+            <li>See your earnings and every payout in your wallet</li>
+          </ul>
+          <a class="btn main" data-link="vendor" href="#">Open your store</a>
+        </div>
+        <div class="panel ride">
+          <h3>Ride with Cönëct</h3>
+          <p>Deliver orders near you on your own schedule, on a bicycle, motorbike or car.</p>
+          <ul>
+            <li>Go online when you want to work and get offers close to you</li>
+            <li>Earn from every delivery, added to your wallet automatically</li>
+            <li>Withdraw to your bank account whenever you reach the minimum</li>
+          </ul>
+          <a class="btn main" style="background:var(--purple);color:#fff" data-link="courier" href="#">Become a rider</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="final">
+    <div class="wrap">
+      <div class="box">
+        <h2>Hungry? Your first order is a few taps away.</h2>
+        <p>Pick a store near you and we will bring it over.</p>
+        <a class="btn" data-link="customer" href="#">Order now</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="yr">2026</span> Cönëct. Made in Nigeria.</span>
+    <nav aria-label="Footer">
+      <a data-link="terms" href="#">Terms</a>
+      <a data-link="privacy" href="#">Privacy</a>
+      <a data-link="contact" href="#">Contact</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+/* ---- EDIT THESE: put your real web addresses here ---- */
+const LINKS = {
+  customer: '#',   // your customer web app on Railway, e.g. https://customer-xxxx.up.railway.app
+  vendor:   '#',   // your vendor web app
+  courier:  '#',   // your courier web app
+  terms:    '#',   // your Terms page
+  privacy:  '#',   // your Privacy page
+  contact:  '#'    // e.g. mailto:hello@cnnet.online
+};
+document.querySelectorAll('[data-link]').forEach(function (a) {
+  var u = LINKS[a.dataset.link];
+  if (u && u !== '#') { a.href = u; if (/^https?:/.test(u)) { a.target = '_blank'; a.rel = 'noopener'; } }
+});
+document.getElementById('yr').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
