@@ -762,6 +762,8 @@ registerDeliveryPin(app, { approvedCourier });
 import { registerExtras } from './extras.js';
 registerExtras(app, { approvedCourier, approvedVendor });
 registerWallet(app, { adminOnly });
+import { registerLegal } from './legal.js';
+registerLegal(app);
 
 const NEXT = { ready: 'picked_up', picked_up: 'delivered' };
 
