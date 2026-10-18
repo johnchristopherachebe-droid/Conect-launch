@@ -2,8 +2,8 @@
 //
 // BEFORE LAUNCH: edit the three values below, then have a Nigerian lawyer review both pages.
 // Anything in [square brackets] is a decision only you can make.
-const COMPANY = 'Cönëct';                       // your registered business name
-const CONTACT_EMAIL = 'YOUR-SUPPORT-EMAIL';     // a real inbox customers can write to
+const COMPANY = 'AJC Technologies';                       // your registered business name
+const CONTACT_EMAIL = 'conectadmin001@gmail.com';     // a real inbox customers can write to
 const UPDATED = 'October 2026';
 
 const page = (title, body) => `<!doctype html>
