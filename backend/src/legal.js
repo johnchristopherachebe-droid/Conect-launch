@@ -45,21 +45,21 @@ const terms = `
 <li>If you share your PIN before receiving the order, we may not be able to help you recover it.</li></ul></section>
 
 <section><h2>5. Cancellations and refunds</h2>
-<ul><li>You can cancel an order while it is still waiting to be accepted by the vendor. Once a vendor has started preparing it, [describe your policy, for example: it cannot be cancelled].</li>
-<li>If something is wrong with your order (missing, incorrect or not delivered), contact support from the app within [24 hours]. Approved refunds are returned to your original payment method through Paystack, and can take [several] business days.</li>
-<li>[Add anything else about refunds, for example partial refunds or non-refundable items.]</li></ul></section>
+<ul><li>You can cancel an order while it is still waiting to be accepted by the vendor. Once a vendor has started preparing it, it cannot be cancelled.</li>
+<li>If something is wrong with your order (missing, incorrect or not delivered), contact support from the app within 24 hours. Approved refunds are returned to your original payment method through Paystack, and can take several business days.</li>
+<li>In order for a refund to be approved there will ne a thorough investigation.</li></ul></section>
 
 <section><h2>6. Vendors</h2>
 <ul><li>Vendors must complete verification before selling: a business profile, a valid government ID, food-safety approval for food businesses, and an in-person orientation with us.</li>
 <li>Vendors are responsible for the accuracy of their menus, prices and photos, for food safety and legal compliance, and for preparing orders on time.</li>
-<li>Vendors agree to pay ${COMPANY} a commission of [10]% on orders, and a vendor's earnings are paid out as described in [your payout terms].</li>
+<li>Vendors agree to pay ${COMPANY} a commission of 10% on orders, and a vendor's earnings are paid out as described in your payout terms.</li>
 <li>We may close a store that breaks these terms or the law.</li></ul></section>
 
 <section><h2>7. Riders</h2>
 <ul><li>Riders are independent: they are not our employees. They choose when to go online and which orders to accept.</li>
 <li>Riders must complete verification before delivering: a government ID, a driving licence and vehicle registration if they use a motorbike or car, and an in-person orientation.</li>
 <li>Riders must deliver orders safely and respectfully, keep customer details private, use them only to complete the delivery, and never complete a delivery without the customer's PIN.</li>
-<li>Rider payments are described in [your rider payment terms].</li></ul></section>
+<li>Rider payments are described in your rider payment terms.</li></ul></section>
 
 <section><h2>8. What is not allowed</h2>
 <ul><li>Fraud, false orders, misuse of promotions or refunds, or abusing vendors, riders or our staff.</li>
@@ -67,7 +67,7 @@ const terms = `
 <li>Ordering or selling anything illegal.</li></ul></section>
 
 <section><h2>9. Our responsibility</h2>
-<p>We provide the platform. Vendors prepare the goods and riders deliver them, so we are not the maker of the goods. To the extent the law allows, ${COMPANY} is not liable for indirect losses, or for problems outside our control such as network outages or events beyond our reasonable control. Nothing in these terms limits rights you have under Nigerian law that cannot be limited. [Have a lawyer review this section.]</p></section>
+<p>We provide the platform. Vendors prepare the goods and riders deliver them, so we are not the maker of the goods. To the extent the law allows, ${COMPANY} is not liable for indirect losses, or for problems outside our control such as network outages or events beyond our reasonable control. Nothing in these terms limits rights you have under Nigerian law that cannot be limited.</p></section>
 
 <section><h2>10. Changes and contact</h2>
 <p>We may update these terms and will update the date above. If you keep using the app after a change, you accept the new terms. These terms are governed by the laws of the Federal Republic of Nigeria. Contact us at ${CONTACT_EMAIL}.</p></section>`;
@@ -98,7 +98,7 @@ const privacy = `
 <li>We do not sell your personal data.</li></ul></section>
 
 <section><h2>5. How long we keep it</h2>
-<p>We keep your data while your account is active, and afterwards for as long as needed for accounting, safety, disputes and legal requirements [state your retention periods]. If you delete your account in the app (Profile → Delete account), we deactivate it and anonymise your profile. Some records, such as transactions, may be kept where the law requires.</p></section>
+<p>We keep your data while your account is active, and afterwards for as long as needed for accounting, safety, disputes and legal requirements up to 4 years. If you delete your account in the app (Profile → Delete account), we deactivate it and anonymise your profile. Some records, such as transactions, may be kept where the law requires.</p></section>
 
 <section><h2>6. Security</h2>
 <p>We protect your data with encryption in transit, hashed passwords, and encrypted storage of verification documents. No system is perfectly secure, so please keep your password and delivery PIN private.</p></section>
