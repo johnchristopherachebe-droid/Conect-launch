@@ -251,9 +251,9 @@ const LINKS = {
   customer: 'app.cnnet.online',   // your customer web app on Railway, e.g. https://customer-xxxx.up.railway.app
   vendor:   'vendir.cnnet.online',   // your vendor web app
   courier:  'rider.cnnet.online',   // your courier web app
-  terms:    '#',   // your Terms page
-  privacy:  '#',   // your Privacy page
-  contact:  '#'    // e.g. mailto:hello@cnnet.online
+  terms:    'https://api.cnnet.online.up.railway.app/terms',   // your Terms page
+  privacy:  'https://api.cnnet.online.up.railway.app/privacy',   // your Privacy page
+  contact:  'mailto:conectadmin001@gmail.com'    // e.g. mailto:hello@cnnet.online
 };
 document.querySelectorAll('[data-link]').forEach(function (a) {
   var u = LINKS[a.dataset.link];
