@@ -9,6 +9,7 @@ import 'main.dart' show api;
 import 'push.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'application.dart';
+import 'wallet.dart';
 
 const _nextLabel = {
   'ready': 'Mark as picked up',
@@ -114,7 +115,23 @@ class _JobsScreenState extends State<JobsScreen> {
     return GradientPage(
       title: approved ? 'Deliveries' : 'Courier application',
       subtitle: approved ? (online ? 'You’re online' : 'You’re offline') : 'Pending verification',
-      actions: [
+            actions: [
+        if (approved)
+          IconButton(
+            tooltip: 'Wallet',
+            icon: const Icon(Icons.account_balance_wallet_outlined, color: Colors.white),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => GradientPage(
+                title: 'Wallet',
+                subtitle: 'Earnings and withdrawals',
+                child: WalletView(send: (method, path, [body]) => switch (method) {
+                  'GET' => api.get(path),
+                  'PUT' => api.put(path, body ?? {}),
+                  _ => api.post(path, body),
+                }),
+              ),
+            )),
+          ),
         IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded, color: Colors.white), onPressed: refresh),
         IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout, color: Colors.white), onPressed: widget.onSignOut),
       ],
