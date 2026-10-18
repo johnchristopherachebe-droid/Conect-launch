@@ -370,6 +370,133 @@ describe('Cönëct API', { skip: url ? false : 'set TEST_DATABASE_URL to run the
     assert.equal(thread.body.length, 1);
   });
 
+  
+  // ---- Wallets --------------------------------------------------------------
+  const makeAdmin = async () => {
+    const u = await register();
+    await pool.query("UPDATE users SET role='admin' WHERE email=$1", [u.email]);
+    return (await call('POST', '/auth/login', { email: u.email, password: 'password123' })).body.token;
+  };
+  // A vendor-owned store, a paid order in "picked_up" assigned to an approved courier, ready for the PIN step.
+  const deliverableOrder = async () => {
+    const vendor = await register('vendor'), courier = await register('courier');
+    await pool.query('UPDATE users SET vendor_approved=true WHERE email=$1', [vendor.email]);
+    await pool.query('UPDATE users SET courier_approved=true WHERE email=$1', [courier.email]);
+    await pool.query('UPDATE stores SET vendor_id=(SELECT id FROM users WHERE email=$1) WHERE id=1', [vendor.email]);
+    const placed = await newOrder();
+    await pool.query("UPDATE orders SET paid=true,status='picked_up',courier_id=(SELECT id FROM users WHERE email=$2) WHERE id=$1", [placed.order.id, courier.email]);
+    const pin = (await call('GET', `/orders/${placed.order.id}/pin`, null, placed.token)).body.pin;
+    const deliver = () => call('POST', `/courier/orders/${placed.order.id}/advance`, { pin }, courier.token);
+    return { vendor, courier, placed, deliver };
+  };
+  const walletOf = async (token) => (await call('GET', '/wallet', null, token)).body;
+
+  it('pays vendor and courier wallets exactly once when an order is delivered', async () => {
+    const { vendor, courier, placed, deliver } = await deliverableOrder();
+    const row = (await pool.query('SELECT vendor_net_amount,delivery_fee,courier_share_percent FROM orders WHERE id=$1', [placed.order.id])).rows[0];
+    assert.equal((await walletOf(vendor.token)).balance, 0);
+    assert.equal((await deliver()).status, 200);
+    const expectedCourier = Math.round(Number(row.delivery_fee) * Number(row.courier_share_percent)) / 100;
+    assert.equal((await walletOf(vendor.token)).balance, Number(row.vendor_net_amount));
+    assert.equal((await walletOf(courier.token)).balance, expectedCourier);
+    assert.equal((await deliver()).status, 409, 'a second delivery attempt must be rejected');
+    assert.equal((await walletOf(vendor.token)).balance, Number(row.vendor_net_amount), 'balance must not change on a repeat');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM wallet_entries WHERE order_id=$1', [placed.order.id])).rows[0].n, 2);
+    assert.equal((await call('GET', '/wallet', null, placed.token)).status, 403, 'customers have no wallet');
+    assert.equal((await call('GET', '/wallet')).status, 401);
+  });
+
+  it('holds money on withdrawal request, blocks overdrafts and double requests, and settles via admin', async () => {
+    const { vendor } = await deliverableOrder();
+    const admin = await makeAdmin();
+    const vendorId = (await pool.query('SELECT id FROM users WHERE email=$1', [vendor.email])).rows[0].id;
+    assert.equal((await call('PATCH', '/admin/settings/wallet', { courier_share_percent: 100, min_withdrawal: 1000 }, admin)).status, 200);
+    assert.equal((await call('POST', `/admin/wallets/${vendorId}/adjust`, { amount: 5000, note: 'Test top-up' }, admin)).status, 201);
+    assert.equal((await call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token)).status, 409, 'needs a bank account first');
+    assert.equal((await call('PUT', '/wallet/payout-account', { bank_name: 'GTBank', account_number: '12345', account_name: 'Test Bakery' }, vendor.token)).status, 400, 'account number must be 10 digits');
+    assert.equal((await call('PUT', '/wallet/payout-account', { bank_name: 'GTBank', account_number: '0123456789', account_name: 'Test Bakery' }, vendor.token)).status, 200);
+    assert.equal((await call('POST', '/wallet/withdrawals', { amount: 500 }, vendor.token)).status, 400, 'below the minimum');
+    assert.equal((await call('POST', '/wallet/withdrawals', { amount: 99_999_999 }, vendor.token)).status, 409, 'more than the balance');
+    assert.equal((await call('POST', '/wallet/withdrawals', { amount: 10.123 }, vendor.token)).status, 400, 'more than 2 decimals');
+    const before = (await walletOf(vendor.token)).balance;
+
+    // Two simultaneous requests must not both succeed.
+    const both = await Promise.all([call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token), call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token)]);
+    assert.deepEqual(both.map((r) => r.status).sort(), [201, 409]);
+    const wr = both.find((r) => r.status === 201).body;
+    const during = await walletOf(vendor.token);
+    assert.equal(during.balance, before - 1000, 'money is held immediately');
+    assert.equal(during.pending_withdrawal, 1000);
+
+    assert.equal((await call('PATCH', `/admin/withdrawals/${wr.id}`, { status: 'rejected' }, admin)).status, 400, 'a reason is required');
+    assert.equal((await call('PATCH', `/admin/withdrawals/${wr.id}`, { status: 'rejected', note: 'Name does not match your ID' }, admin)).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, before, 'rejection gives the money back');
+    assert.equal((await call('PATCH', `/admin/withdrawals/${wr.id}`, { status: 'paid', payout_reference: 'TRF1' }, admin)).status, 409, 'already settled');
+
+    const second = (await call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token)).body;
+    assert.equal((await call('PATCH', `/admin/withdrawals/${second.id}`, { status: 'paid' }, admin)).status, 400, 'bank reference required');
+    assert.equal((await call('PATCH', `/admin/withdrawals/${second.id}`, { status: 'paid', payout_reference: 'TRF2' }, admin)).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, before - 1000);
+    assert.equal((await call('PATCH', `/admin/withdrawals/${second.id}`, { status: 'rejected', note: 'oops' }, admin)).status, 409, 'a paid withdrawal cannot be reversed');
+    assert.equal((await call('GET', '/admin/withdrawals', null, vendor.token)).status, 403);
+    assert.equal((await call('GET', '/admin/withdrawals?status=paid', null, admin)).status, 200);
+  });
+
+  it('keeps unapproved vendors from withdrawing and ignores a later bank change on an open payout', async () => {
+    const { vendor } = await deliverableOrder();
+    const admin = await makeAdmin();
+    const vendorId = (await pool.query('SELECT id FROM users WHERE email=$1', [vendor.email])).rows[0].id;
+    await call('POST', `/admin/wallets/${vendorId}/adjust`, { amount: 3000, note: 'Test top-up' }, admin);
+    await call('PUT', '/wallet/payout-account', { bank_name: 'GTBank', account_number: '0123456789', account_name: 'Test Bakery' }, vendor.token);
+    await pool.query('UPDATE users SET vendor_approved=false WHERE id=$1', [vendorId]);
+    assert.equal((await call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token)).status, 403);
+    await pool.query('UPDATE users SET vendor_approved=true WHERE id=$1', [vendorId]);
+    const wr = (await call('POST', '/wallet/withdrawals', { amount: 1000 }, vendor.token)).body;
+    await call('PUT', '/wallet/payout-account', { bank_name: 'Other Bank', account_number: '9999999999', account_name: 'Someone Else' }, vendor.token);
+    const listed = (await call('GET', '/admin/withdrawals?status=requested', null, admin)).body.find((w) => w.id === wr.id);
+    assert.equal(listed.account_number, '0123456789', 'the payout goes to the account saved when it was requested');
+  });
+
+  it('takes earnings back when a delivered order is refunded and restores them if the refund fails', async () => {
+    const { vendor, courier, placed, deliver } = await deliverableOrder();
+    const admin = await makeAdmin();
+    await deliver();
+    const v0 = (await walletOf(vendor.token)).balance, c0 = (await walletOf(courier.token)).balance;
+    assert.ok(v0 > 0 && c0 > 0);
+    await pool.query("UPDATE orders SET payment_ref='orig-charge' WHERE id=$1", [placed.order.id]);
+    const setRefund = (status, extra = {}) => call('PATCH', `/admin/orders/${placed.order.id}/refund-status`, { status, ...extra }, admin);
+    assert.equal((await setRefund('processing')).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, 0, 'vendor earnings reversed while the refund is under way');
+    assert.equal((await walletOf(courier.token)).balance, 0);
+    assert.equal((await setRefund('processing')).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, 0, 'reversal is not applied twice');
+    assert.equal((await setRefund('failed', { note: 'Provider error' })).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, v0, 'failed refund restores the vendor');
+    assert.equal((await walletOf(courier.token)).balance, c0);
+    assert.equal((await setRefund('requested')).status, 200);
+    assert.equal((await setRefund('completed', { note: 'Confirmed in Paystack', provider_reference: 'RF-1' })).status, 200);
+    assert.equal((await walletOf(vendor.token)).balance, 0, 'completed refund keeps the earnings removed');
+  });
+
+  it('shows admins one history of every money movement, filterable and exportable', async () => {
+    const { vendor, placed, deliver } = await deliverableOrder();
+    const admin = await makeAdmin();
+    await pool.query("INSERT INTO payment_attempts(reference,order_id,amount_kobo,status) VALUES('tx-hist-ref',$1,$2,'paid')", [placed.order.id, Math.round(Number(placed.order.total) * 100)]);
+    await deliver();
+    const all = await call('GET', '/admin/transactions', null, admin);
+    assert.equal(all.status, 200);
+    const types = new Set(all.body.rows.filter((r) => r.order_id === placed.order.id).map((r) => r.type));
+    assert.ok(types.has('payment') && types.has('earning'), 'payment and earnings both appear');
+    assert.ok(Number(all.body.summary.collected) > 0);
+    assert.equal((await call('GET', '/admin/transactions?type=payment', null, admin)).body.rows.every((r) => r.type === 'payment'), true);
+    assert.ok((await call('GET', `/admin/transactions?q=${encodeURIComponent(vendor.email)}`, null, admin)).body.rows.length >= 1);
+    assert.equal((await call('GET', '/admin/transactions?before=not-a-date', null, admin)).status, 400);
+    const csv = await realFetch(base + '/admin/transactions?format=csv', { headers: { Authorization: `Bearer ${admin}` } });
+    assert.equal(csv.status, 200);
+    assert.match(csv.headers.get('content-type'), /text\/csv/);
+    assert.equal((await call('GET', '/admin/transactions', null, vendor.token)).status, 403);
+  });
+
   it('keeps customers and anonymous users out of the admin API', async () => {
     const { token } = await register();
     assert.equal((await call('GET', '/admin/orders', null, token)).status, 403);
