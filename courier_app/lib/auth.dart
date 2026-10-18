@@ -126,7 +126,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 12),
         const Text('Verify your email', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text('We sent a verification link to ${verificationEmail ?? email.text}. Open it, then return here to sign in.',
+        Text('We sent a verification link to ${verificationEmail ?? email.text}. Open it, then return here to sign in.\n\nCan’t find it? Check your spam or junk folder and mark it “Not spam”.',
             textAlign: TextAlign.center),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, textAlign: TextAlign.center)),
         const SizedBox(height: 16),
