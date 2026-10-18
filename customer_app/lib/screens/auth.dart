@@ -197,7 +197,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const Icon(Icons.mark_email_read_outlined, size: 60, color: conectPurple),
         const SizedBox(height: 16),
         Text(
-          'We sent a verification link to ${verificationEmail ?? email.text}. Open it to activate your account, then return here to sign in.',
+          'We sent a verification link to ${verificationEmail ?? email.text}. Open it to activate your account, then return here to sign in.\n\nCan’t find it? Check your spam or junk folder and mark it “Not spam”.',
           textAlign: TextAlign.center,
         ),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, textAlign: TextAlign.center)),
