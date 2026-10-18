@@ -12,6 +12,7 @@ import { q, tx, pool } from './db.js';
 import { sign, requireAuth } from './auth.js';
 import { notifyUser } from './push.js';
 import { startDispatch, dispatchTick } from './dispatch.js';
+import { registerWallet, creditOrderEarnings, reverseOrderEarnings, restoreOrderEarnings } from './wallet.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind Caddy: use the real client IP for rate limits
@@ -377,11 +378,10 @@ app.post('/addresses', requireAuth('customer'), h(async (req, res) => {
 }));
 
 async function getDeliveryPricing() {
-  const rows=(await q(`SELECT key,value FROM app_settings WHERE key IN ('delivery_base_fee','delivery_per_km','delivery_min_fee','vendor_commission_percent')`)).rows;
+  const rows=(await q(`SELECT key,value FROM app_settings WHERE key IN ('delivery_base_fee','delivery_per_km','delivery_min_fee','vendor_commission_percent','courier_share_percent')`)).rows;
   const values=Object.fromEntries(rows.map(r=>[r.key,Number(r.value)]));
-  return { baseFee:Number.isFinite(values.delivery_base_fee)?values.delivery_base_fee:Number(process.env.DELIVERY_BASE_FEE??300), perKm:Number.isFinite(values.delivery_per_km)?values.delivery_per_km:Number(process.env.DELIVERY_PER_KM??180), minFee:Number.isFinite(values.delivery_min_fee)?values.delivery_min_fee:Number(process.env.DELIVERY_MIN_FEE??300), commissionPercent:Number.isFinite(values.vendor_commission_percent)?values.vendor_commission_percent:10 };
+  return { baseFee:Number.isFinite(values.delivery_base_fee)?values.delivery_base_fee:Number(process.env.DELIVERY_BASE_FEE??300), perKm:Number.isFinite(values.delivery_per_km)?values.delivery_per_km:Number(process.env.DELIVERY_PER_KM??180), minFee:Number.isFinite(values.delivery_min_fee)?values.delivery_min_fee:Number(process.env.DELIVERY_MIN_FEE??300), commissionPercent:Number.isFinite(values.vendor_commission_percent)?values.vendor_commission_percent:10, courierSharePercent:Number.isFinite(values.courier_share_percent)?values.courier_share_percent:100 };
 }
-
 // ---------- Catalog (public) ----------
 app.get('/stores', h(async (req, res) => {
   const { category, search } = req.query;
@@ -469,10 +469,10 @@ app.post('/orders', requireAuth('customer'), h(async (req, res) => {
     const commissionAmount = Math.round(subtotal * commissionRate) / 100;
     const vendorNetAmount = Math.round((subtotal - commissionAmount) * 100) / 100;
 
-    const o = (await c.query(
-      `INSERT INTO orders (customer_id, store_id, address_id, subtotal, delivery_fee, total, commission_rate, commission_amount, vendor_net_amount)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.user.id, store.id, b.addressId, subtotal, fee, subtotal + fee, commissionRate, commissionAmount, vendorNetAmount])).rows[0];
+      const o = (await c.query(
+      `INSERT INTO orders (customer_id, store_id, address_id, subtotal, delivery_fee, total, commission_rate, commission_amount, vendor_net_amount, courier_share_percent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.user.id, store.id, b.addressId, subtotal, fee, subtotal + fee, commissionRate, commissionAmount, vendorNetAmount, pricing.courierSharePercent])).rows[0];
     for (const l of lines)
       await c.query(
         `INSERT INTO order_items (order_id, product_id, name, unit_price, quantity)
@@ -603,6 +603,7 @@ async function requestOrderRefund(orderId, { ticketId = null } = {}) {
     }
     await client.query("UPDATE orders SET refund_status='processing',refund_updated_at=now() WHERE id=$1", [order.id]);
     await client.query("UPDATE support_tickets SET refund_status='processing',updated_at=now() WHERE order_id=$1 AND customer_id=$2 AND refund_status NOT IN ('completed','rejected')", [order.id, order.customer_id]);
+    await reverseOrderEarnings(client, order.id); // no-op unless the order was already delivered and paid out to wallets
     return { kind: 'claimed', orderId: order.id, customerId: order.customer_id, paymentRef: order.payment_ref };
   });
   if (claim.kind !== 'claimed') return claim;
@@ -760,16 +761,22 @@ import { registerDeliveryPin } from './delivery-pin.js';
 registerDeliveryPin(app, { approvedCourier });
 import { registerExtras } from './extras.js';
 registerExtras(app, { approvedCourier, approvedVendor });
+registerWallet(app, { adminOnly });
 
 const NEXT = { ready: 'picked_up', picked_up: 'delivered' };
 
 app.post('/courier/orders/:id/advance', requireAuth('courier'), approvedCourier, h(async (req, res) => {
   const cur = (await q('SELECT status FROM orders WHERE id=$1 AND courier_id=$2',
     [req.params.id, req.user.id])).rows[0];
-  if (!cur || !NEXT[cur.status]) return res.status(409).json({ error: 'Cannot advance this order' });
-  const { rows } = await q(
-    `UPDATE orders SET status=$3, updated_at=now() WHERE id=$1 AND courier_id=$2 AND status=$4 RETURNING *`,
-    [req.params.id, req.user.id, NEXT[cur.status], cur.status]);
+    if (!cur || !NEXT[cur.status]) return res.status(409).json({ error: 'Cannot advance this order' });
+  // Marking delivered and paying the vendor/courier wallets happen in one transaction: both or neither.
+  const rows = await tx(async (c) => {
+    const upd = (await c.query(
+      `UPDATE orders SET status=$3, updated_at=now() WHERE id=$1 AND courier_id=$2 AND status=$4 RETURNING *`,
+      [req.params.id, req.user.id, NEXT[cur.status], cur.status])).rows;
+    if (upd[0] && upd[0].status === 'delivered') await creditOrderEarnings(c, upd[0].id);
+    return upd;
+  });
   if (!rows[0]) return res.status(409).json({ error: 'The order changed, please refresh' });
   const MESSAGES = {
     preparing: 'Your order is being prepared.',
@@ -893,7 +900,9 @@ app.patch('/admin/orders/:id/refund-status', adminOnly, h(async(req,res)=>{
          refund_updated_at=now()
        WHERE id=$1 RETURNING id,refund_status,refund_note,refund_provider_reference,refund_reconciled_by,refund_reconciled_at,refund_updated_at`,
       [req.params.id,b.status,b.note??null,b.provider_reference??null,req.user.id])).rows[0];
-    await client.query('UPDATE support_tickets SET refund_status=$2,updated_at=now() WHERE order_id=$1',[req.params.id,b.status]);
+        await client.query('UPDATE support_tickets SET refund_status=$2,updated_at=now() WHERE order_id=$1',[req.params.id,b.status]);
+    if (['failed','rejected'].includes(b.status)) await restoreOrderEarnings(client, req.params.id);
+    else await reverseOrderEarnings(client, req.params.id);
     return {kind:'ok',order:updated};
   });
   if (result.kind==='not_found') return res.status(404).json({error:'Paid order not found.'});
