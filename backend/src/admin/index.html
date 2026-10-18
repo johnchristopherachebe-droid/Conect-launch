@@ -102,7 +102,7 @@ function loginView() {
 }
 
 function shell() {
-  const tabs = currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','settings','support'];
+  const tabs = currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','payouts','transactions','settings','support'];
   $('#root').innerHTML = `<div class="top"><div class="top-in"><div class="brandrow">${LOGO}${WORD}<span class="tag">${currentRole === 'support' ? 'SUPPORT' : 'ADMIN'}</span></div><button id="out" class="ghost">Sign out</button></div>
   <nav class="tabs">${tabs.map((t) => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</nav></div>
   <main><p class="err" id="e"></p><div id="view"></div></main>`;
@@ -121,6 +121,8 @@ async function show() {
     else if (tab === 'vendors' && currentRole === 'admin') await vendorsView();
     else if (tab === 'documents' && currentRole === 'admin') await documentsView();
     else if (tab === 'zones' && currentRole === 'admin') await zonesView();
+    else if (tab === 'payouts' && currentRole === 'admin') await payoutsView();
+    else if (tab === 'transactions' && currentRole === 'admin') await transactionsView();
     else if (tab === 'settings' && currentRole === 'admin') await settingsView();
     else await supportView();
   } catch (x) { if ($('#e')) $('#e').textContent = x.message; }
@@ -242,7 +244,75 @@ async function zonesView() {
   $('#za').onclick=()=>run(async()=>{await api('POST','/admin/delivery-zones',{name:$('#zn').value.trim(),center_lat:Number($('#zlat').value),center_lng:Number($('#zlng').value),radius_km:Number($('#zrad').value),enabled:true});await zonesView();});
 }
 
+
+let txType = '', txQ = '';
+const TX_TYPE_LABELS = { payment: 'Payments', refund: 'Refunds', earning: 'Earnings', reversal: 'Earnings taken back', withdrawal: 'Withdrawals', payout: 'Bank payouts', adjustment: 'Adjustments' };
+const txRowHtml = (r) => `<tr><td>${new Date(r.occurred_at).toLocaleString()}</td><td><span class="pill">${esc(r.type)}</span></td><td>${esc(r.label)}</td><td style="text-align:right;white-space:nowrap;color:${Number(r.amount) < 0 ? '#DC2626' : '#16A34A'}"><b>${Number(r.amount) < 0 ? '-' : '+'}${naira(Math.abs(Number(r.amount)))}</b></td><td>${esc(r.party)}<br><span class="mute">${esc(r.email)}</span></td><td class="mute">${r.order_id ? esc(String(r.order_id).slice(0, 8)) : ''}</td><td class="mute">${esc(r.reference || '')}</td></tr>`;
+const txQuery = (extra = '') => '/admin/transactions?' + new URLSearchParams({ ...(txType ? { type: txType } : {}), ...(txQ ? { q: txQ } : {}) }).toString() + extra;
+
+async function transactionsView() {
+  const d = await api('GET', txQuery());
+  const s = d.summary || {};
+  const card = (label, v, hint) => `<div style="flex:1;min-width:150px;padding:12px 14px;border:1px solid #EAE4F5;border-radius:14px"><div class="mute" style="font-size:13px">${label}</div><div style="font-size:20px;font-weight:800">${naira(v ?? 0)}</div><div class="mute" style="font-size:12px">${hint}</div></div>`;
+  $('#view').innerHTML = `<h2>Transaction history</h2><p class="mute">Every money movement in the app, newest first. This page only reads data.</p>
+  <div class="row" style="flex-wrap:wrap;gap:10px">${card('Collected from customers', s.collected, 'Paid orders, incl. delivery')}${card('Refunded', s.refunded, 'Refunds marked completed')}${card('Commission earned', s.commission, 'Delivered, not refunded')}${card('Held in wallets', s.in_wallets, 'Owed to vendors and couriers')}${card('Awaiting payout', s.awaiting_payout, 'Requested withdrawals')}${card('Paid out', s.paid_out, 'Bank payouts so far')}</div>
+  <div class="row" style="margin-top:14px"><label>Type <select id="txt"><option value="">All</option>${Object.entries(TX_TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${k === txType ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+  <input id="txq" placeholder="Search name, email, order or reference" aria-label="Search" value="${esc(txQ)}"><button class="primary" id="txgo">Search</button><button id="txcsv">Download CSV</button></div>
+  <div class="scroll"><table><thead><tr><th>Time</th><th>Type</th><th>What</th><th style="text-align:right">Amount</th><th>Person</th><th>Order</th><th>Reference / note</th></tr></thead><tbody id="txbody">${d.rows.map(txRowHtml).join('') || '<tr><td colspan="7" class="mute">No transactions match.</td></tr>'}</tbody></table></div>
+  <div class="row"><button id="txmore" ${d.next_before ? '' : 'hidden'}>Load more</button></div>`;
+  let next = d.next_before;
+  $('#txgo').onclick = () => { txType = $('#txt').value; txQ = $('#txq').value.trim(); run(async () => {}); };
+  $('#txq').onkeydown = (ev) => { if (ev.key === 'Enter') $('#txgo').click(); };
+  $('#txmore').onclick = () => run2(async () => {
+    const more = await api('GET', txQuery('&before=' + encodeURIComponent(next)));
+    $('#txbody').insertAdjacentHTML('beforeend', more.rows.map(txRowHtml).join(''));
+    next = more.next_before; if (!next) $('#txmore').hidden = true;
+  });
+  $('#txcsv').onclick = () => run2(async () => {
+    const r = await fetch(txQuery('&format=csv'), { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Could not download'); }
+    const url = URL.createObjectURL(await r.blob()); const a = document.createElement('a');
+    a.href = url; a.download = 'conect-transactions.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+  });
+}
+// Like run(), but does not redraw the page (keeps already-loaded rows on screen).
+async function run2(fn) { try { err = ''; await fn(); } catch (e) { err = e.message; } const el = $('#e'); if (el) el.textContent = err; }
+
+async function payoutsView() {
+  const [pending, history, wallets, st] = await Promise.all([
+    api('GET', '/admin/withdrawals?status=requested'), api('GET', '/admin/withdrawals'), api('GET', '/admin/wallets'), api('GET', '/admin/settings')]);
+  const done = history.filter((w) => w.status !== 'requested').slice(0, 30);
+  $('#view').innerHTML = `<h2>Withdrawal requests</h2><p class="mute">Send the money from your bank or Paystack dashboard first, then mark the request paid with the transfer reference. Rejecting returns the money to the person's wallet.</p>
+  <div class="scroll"><table><tr><th>Requested</th><th>Who</th><th>Amount</th><th>Pay to</th><th></th></tr>
+  ${pending.map((w) => `<tr><td>${new Date(w.created_at).toLocaleString()}</td><td>${esc(w.name)}<br><span class="mute">${esc(w.role)} · ${esc(w.email)}</span></td><td><b>${naira(w.amount)}</b></td><td>${esc(w.account_name)}<br>${esc(w.bank_name)} · ${esc(w.account_number)}</td><td><button class="primary" data-wd-paid="${esc(w.id)}">Mark paid</button> <button data-wd-reject="${esc(w.id)}">Reject</button></td></tr>`).join('') || '<tr><td colspan="5" class="mute">No withdrawals waiting.</td></tr>'}</table></div>
+  <h3>Recently settled</h3><div class="scroll"><table><tr><th>When</th><th>Who</th><th>Amount</th><th>Result</th><th>Reference / reason</th></tr>
+  ${done.map((w) => `<tr><td>${w.processed_at ? new Date(w.processed_at).toLocaleString() : ''}</td><td>${esc(w.name)}</td><td>${naira(w.amount)}</td><td><span class="pill">${esc(w.status)}</span></td><td>${esc(w.payout_reference || w.admin_note || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="mute">Nothing settled yet.</td></tr>'}</table></div>
+  <hr><h2>Wallet balances</h2><div class="scroll"><table><tr><th>Name</th><th>Role</th><th>Balance</th><th>Lifetime earnings</th><th></th></tr>
+  ${wallets.map((w) => `<tr><td>${esc(w.name)}<br><span class="mute">${esc(w.email)}</span></td><td>${esc(w.role)}</td><td>${naira(w.balance)}</td><td>${naira(w.lifetime_earnings)}</td><td><button data-wl-adjust="${esc(w.id)}" data-name="${esc(w.name)}">Adjust</button></td></tr>`).join('') || '<tr><td colspan="5" class="mute">No vendors or couriers yet.</td></tr>'}</table></div>
+  <hr><h2>Wallet rules</h2><p class="mute">Applies to new orders. The courier share is saved on each order when it is placed.</p>
+  <div class="row"><label>Courier share of delivery fee (%)<br><input id="wshare" type="number" min="0" max="100" step="1" value="${esc(st.courier_share_percent?.value ?? 100)}"></label><label>Minimum withdrawal (₦)<br><input id="wmin" type="number" min="0" step="100" value="${esc(st.min_withdrawal?.value ?? 1000)}"></label></div>
+  <button class="primary" id="wsave">Save wallet rules</button>`;
+  document.querySelectorAll('[data-wd-paid]').forEach((b) => b.onclick = () => run(async () => {
+    const ref = prompt('Bank transfer reference for this payout:', ''); if (!ref || !ref.trim()) return;
+    await api('PATCH', `/admin/withdrawals/${b.dataset.wdPaid}`, { status: 'paid', payout_reference: ref.trim() });
+  }));
+  document.querySelectorAll('[data-wd-reject]').forEach((b) => b.onclick = () => run(async () => {
+    const why = prompt('Reason for rejecting (the person will see this):', ''); if (!why || !why.trim()) return;
+    await api('PATCH', `/admin/withdrawals/${b.dataset.wdReject}`, { status: 'rejected', note: why.trim() });
+  }));
+  document.querySelectorAll('[data-wl-adjust]').forEach((b) => b.onclick = () => run(async () => {
+    const amt = prompt(`Adjust ${b.dataset.name}'s wallet (₦). Use a minus sign to deduct:`, ''); if (amt === null || amt.trim() === '') return;
+    const note = prompt('Reason (kept in the wallet history):', ''); if (!note || !note.trim()) return;
+    await api('POST', `/admin/wallets/${b.dataset.wlAdjust}/adjust`, { amount: Number(amt), note: note.trim() });
+  }));
+  $('#wsave').onclick = () => run(async () => {
+    await api('PATCH', '/admin/settings/wallet', { courier_share_percent: Number($('#wshare').value), min_withdrawal: Number($('#wmin').value) });
+    alert('Wallet rules saved.');
+  });
+}
+
 async function settingsView() {
+
   const s=await api('GET','/admin/settings');
   $('#view').innerHTML=`<h2>Delivery pricing</h2><p class="mute">These settings apply to future delivery quotes and orders. Prices are in naira (NGN). Existing orders keep their recorded fee.</p>
   <div class="row"><label>Base fee (₦)<br><input id="dbase" type="number" min="0" step="1" value="${esc(s.delivery_base_fee?.value ?? 300)}"></label><label>Per kilometre (₦)<br><input id="dper" type="number" min="0" step="1" value="${esc(s.delivery_per_km?.value ?? 180)}"></label><label>Minimum fee (₦)<br><input id="dmin" type="number" min="0" step="1" value="${esc(s.delivery_min_fee?.value ?? 300)}"></label></div>
