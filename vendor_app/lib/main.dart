@@ -9,6 +9,8 @@ import 'brand.dart';
 import 'package:image/image.dart' as img;
 import 'application.dart';
 import 'onboarding.dart';
+import 'wallet.dart';
+
 
 final String apiUrl =
     const String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000').replaceAll(RegExp(r'/+$'), '');
@@ -502,7 +504,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
     final store = data?['store'];
     final isOpen = store != null && store['is_open'] == true;
     final newCount = orders.where((o) => o['paid'] == true && o['status'] == 'placed').length;
-    final titles = ['Orders', 'Products', 'Store'];
+    final titles = ['Orders', 'Products', 'Store', 'Wallet'];
     return GradientPage(
       title: store?['name'] ?? 'Your store',
       subtitle: '${titles[tab]} · ${isOpen ? 'Open for orders' : 'Closed'}',
@@ -518,9 +520,16 @@ class _VendorDashboardState extends State<VendorDashboard> {
           ),
           const NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu_rounded), label: 'Products'),
           const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Store'),
+          const NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Wallet'),
         ],
-      ),
-      child: tab == 0 ? _ordersTab() : tab == 1 ? _productsTab() : _storeTab(),
+            ),
+      child: tab == 0
+          ? _ordersTab()
+          : tab == 1
+              ? _productsTab()
+              : tab == 2
+                  ? _storeTab()
+                  : WalletView(key: const ValueKey('wallet'), send: widget.api.send),
     );
   }
 
