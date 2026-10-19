@@ -235,12 +235,12 @@ async function documentsView() {
 }
 async function zonesView() {
   const rows = await api('GET','/admin/delivery-zones');
-  $('#view').innerHTML = `<h2>No-delivery zones</h2><p class="mute">Addresses inside an enabled circular zone will be blocked at quote and checkout. Use map coordinates for the zone centre.</p>
+  $('#view').innerHTML = `<h2>Delivery zones</h2><p class="mute">Customers can only order when their delivery address is inside an enabled circular zone. If no zone is enabled, delivery is not restricted. Use map coordinates for the zone centre.</p>
   <div class="scroll"><table><tr><th>Name</th><th>Centre latitude</th><th>Centre longitude</th><th>Radius (km)</th><th>Enabled</th><th></th></tr>
   ${rows.map((z)=>`<tr><td>${esc(z.name)}</td><td>${Number(z.center_lat).toFixed(5)}</td><td>${Number(z.center_lng).toFixed(5)}</td><td>${Number(z.radius_km).toFixed(2)}</td><td><input type="checkbox" data-zone-toggle="${z.id}" ${z.enabled?'checked':''} aria-label="Enable ${esc(z.name)}"></td><td><button data-zone-delete="${z.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="mute">No zones configured.</td></tr>'}</table></div>
-  <h3>Add a no-delivery zone</h3><div class="row"><input id="zn" placeholder="Zone name" aria-label="Zone name"><input id="zlat" type="number" step="any" placeholder="Centre latitude" aria-label="Centre latitude"><input id="zlng" type="number" step="any" placeholder="Centre longitude" aria-label="Centre longitude"><input id="zrad" type="number" step="any" min="0.1" max="500" placeholder="Radius km" aria-label="Radius km"><button class="primary" id="za">Add zone</button></div>`;
+  <h3>Add a delivery zone</h3><div class="row"><input id="zn" placeholder="Zone name" aria-label="Zone name"><input id="zlat" type="number" step="any" placeholder="Centre latitude" aria-label="Centre latitude"><input id="zlng" type="number" step="any" placeholder="Centre longitude" aria-label="Centre longitude"><input id="zrad" type="number" step="any" min="0.1" max="500" placeholder="Radius km" aria-label="Radius km"><button class="primary" id="za">Add zone</button></div>`;
   document.querySelectorAll('[data-zone-toggle]').forEach((el)=>el.onchange=()=>run(async()=>{await api('PATCH',`/admin/delivery-zones/${el.dataset.zoneToggle}`,{enabled:el.checked});await zonesView();}));
-  document.querySelectorAll('[data-zone-delete]').forEach((el)=>el.onclick=()=>{if(confirm('Delete this no-delivery zone?'))run(async()=>{await api('DELETE',`/admin/delivery-zones/${el.dataset.zoneDelete}`);await zonesView();});});
+  document.querySelectorAll('[data-zone-delete]').forEach((el)=>el.onclick=()=>{if(confirm('Delete this delivery zone?'))run(async()=>{await api('DELETE',`/admin/delivery-zones/${el.dataset.zoneDelete}`);await zonesView();});});
   $('#za').onclick=()=>run(async()=>{await api('POST','/admin/delivery-zones',{name:$('#zn').value.trim(),center_lat:Number($('#zlat').value),center_lng:Number($('#zlng').value),radius_km:Number($('#zrad').value),enabled:true});await zonesView();});
 }
 
