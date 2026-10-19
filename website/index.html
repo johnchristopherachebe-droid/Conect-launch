@@ -125,6 +125,17 @@ footer a{color:var(--mute)}
   html{scroll-behavior:auto}
   .digits span{animation:none}
 }
+/* android apps */
+.apps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.app-card{border:2px solid var(--ink);border-radius:24px;padding:30px;background:#fff;display:flex;flex-direction:column;gap:10px}
+.app-card.feature{background:var(--deep);border-color:var(--deep);color:#fff}
+.app-card h3{font-size:1.6rem;font-weight:800}
+.app-card p{color:var(--mute);flex:1}
+.app-card.feature p{color:#D8CBFA}
+.app-card .btn{margin-top:14px}
+.app-card.feature .btn.main{background:var(--orange);color:var(--ink)}
+.app-note{margin-top:24px;color:var(--mute);font-size:.98rem;max-width:64ch}
+@media (max-width:900px){.apps-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -223,6 +234,33 @@ footer a{color:var(--mute)}
     </div>
   </section>
 
+  <section id="apps">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="big">Get the Android apps.</h2>
+        <p>Download the app for what you do. Each one is a separate app.</p>
+      </div>
+      <div class="apps-grid">
+        <div class="app-card feature">
+          <h3>Customer app</h3>
+          <p>Order food and groceries, pay securely and track your rider.</p>
+          <a class="btn main" data-link="apk_customer" href="#">Download for Android</a>
+        </div>
+        <div class="app-card">
+          <h3>Vendor app</h3>
+          <p>Run your store: manage products, take orders and see your wallet.</p>
+          <a class="btn main" data-link="apk_vendor" href="#">Download for Android</a>
+        </div>
+        <div class="app-card">
+          <h3>Rider app</h3>
+          <p>Accept deliveries near you, share your location and get paid into your wallet.</p>
+          <a class="btn main" data-link="apk_courier" href="#">Download for Android</a>
+        </div>
+      </div>
+      <p class="app-note"><b>Installing:</b> open the downloaded file. Your phone may ask you to allow installs from your browser, which is normal for apps that are not on the Play Store. On iPhone, use the web app instead: <a href="#" data-link="customer">order on the web</a>.</p>
+    </div>
+  </section>
+
   <div class="final">
     <div class="wrap">
       <div class="box">
@@ -248,6 +286,10 @@ footer a{color:var(--mute)}
 <script>
 /* ---- EDIT THESE: put your real web addresses here ---- */
 const LINKS = {
+  apk_customer: 'https://github.com/johnchristopherachebe-droid/Conect-launch/releases/download/android-customer_app/cnnet-customer.apk',
+  apk_vendor:   'https://github.com/johnchristopherachebe-droid/Conect-launch/releases/download/android-vendor_app/cnnet-vendor.apk',
+  apk_courier:  'https://github.com/johnchristopherachebe-droid/Conect-launch/releases/download/android-courier_app/cnnet-courier.apk',
+
   customer: 'https://app.cnnet.online',   // your customer web app on Railway, e.g. https://customer-xxxx.up.railway.app
   vendor:   'https://vendor.cnnet.online',   // your vendor web app
   courier:  'https://rider.cnnet.online',   // your courier web app
