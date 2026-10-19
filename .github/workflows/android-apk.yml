@@ -69,6 +69,39 @@ jobs:
           NAME=$(grep -m1 '^name:' pubspec.yaml | awk '{print $2}')
           flutter create --platforms android --org ng.cnnet --project-name "$NAME" .
 
+      # Some plugins are built for an older Android version than their own dependencies need
+      # (error: "requires ... compile against version 36 or later"). Make every plugin use Android 36.
+      - name: Raise the Android SDK version for plugins
+        working-directory: ${{ matrix.app }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          kts = os.path.exists('android/build.gradle.kts')
+          path = 'android/build.gradle.kts' if kts else 'android/build.gradle'
+          s = open(path, encoding='utf-8').read()
+          if 'Raise every plugin' in s:
+              raise SystemExit(0)
+          if kts:
+              block = ('// Raise every plugin to Android 36\n'
+                       'subprojects {\n'
+                       '    afterEvaluate {\n'
+                       '        extensions.findByName("android")?.withGroovyBuilder { "compileSdkVersion"(36) }\n'
+                       '    }\n'
+                       '}\n\n')
+          else:
+              block = ('// Raise every plugin to Android 36\n'
+                       'subprojects {\n'
+                       '    afterEvaluate { p ->\n'
+                       '        if (p.hasProperty("android")) { p.android.compileSdkVersion 36 }\n'
+                       '    }\n'
+                       '}\n\n')
+          m = re.search(r'^allprojects', s, re.M)
+          i = m.start() if m else 0
+          s = s[:i] + block + s[i:]
+          open(path, 'w', encoding='utf-8').write(s)
+          PY
+          cat android/build.gradle* | head -30
+
       - name: Set the app name and permissions
         working-directory: ${{ matrix.app }}
         run: |
