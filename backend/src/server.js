@@ -586,7 +586,11 @@ app.get('/payment/done', h(async (req, res) => {
       }
     } catch (e) { console.error('Payment callback verification failed:', e.message); }
   }
-  res.status(200).type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading}</title><body style="font-family:system-ui;text-align:center;padding:48px 24px"><h2>${heading}</h2><p>${message}</p></body>`);
+    const back = (process.env.CUSTOMER_APP_URL || '').replace(/\/$/, '');
+  const ok = /^https:\/\//i.test(back);
+  const refresh = ok ? `<meta http-equiv="refresh" content="2;url=${back}">` : '';
+  const button = ok ? `<p><a href="${back}" style="display:inline-block;padding:13px 20px;background:#6D28D9;color:white;text-decoration:none;border-radius:8px">Back to Cönëct</a></p>` : '';
+  res.status(200).type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">${refresh}<title>${heading}</title><body style="font-family:system-ui;text-align:center;padding:48px 24px"><h2>${heading}</h2><p>${message}</p>${button}</body>`);
 }));
 
 const PAYSTACK = 'https://api.paystack.co';
