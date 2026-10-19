@@ -497,6 +497,21 @@ describe('Cönëct API', { skip: url ? false : 'set TEST_DATABASE_URL to run the
     assert.equal((await call('GET', '/admin/transactions', null, vendor.token)).status, 403);
   });
 
+  
+  it('does not show vendors what the customer pays in total or in delivery fees', async () => {
+    const { vendor, placed } = await deliverableOrder();
+    const list = (await call('GET', '/vendor/orders', null, vendor.token)).body;
+    const mine = list.find((o) => o.id === placed.order.id);
+    assert.ok(mine, 'the vendor still sees their own order');
+    assert.equal('total' in mine, false);
+    assert.equal('delivery_fee' in mine, false);
+    assert.ok(Number(mine.vendor_net_amount) > 0, 'the vendor sees what they will earn');
+    await pool.query("UPDATE orders SET status='placed', courier_id=NULL WHERE id=$1", [placed.order.id]);
+    const res = await call('PATCH', `/vendor/orders/${placed.order.id}/status`, { status: 'preparing' }, vendor.token);
+    assert.equal(res.status, 200);
+    for (const k of ['total', 'delivery_fee', 'subtotal', 'payment_ref', 'customer_id', 'commission_amount']) assert.equal(k in res.body, false, k + ' must not be returned to vendors');
+  });
+
   it('keeps customers and anonymous users out of the admin API', async () => {
     const { token } = await register();
     assert.equal((await call('GET', '/admin/orders', null, token)).status, 403);
