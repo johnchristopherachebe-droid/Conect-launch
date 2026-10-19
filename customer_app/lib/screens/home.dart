@@ -280,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           final list = snap.data as List;
           if (list.isEmpty) {
-            return _notice('No stores with a configured GPS location were found within 15 km. Try another search or refresh your location.',
+            return _notice('No stores were found for your location. You may be outside our delivery areas, or try another search or refresh your location.',
                 'Refresh location', locate);
           }
           return Column(children: [for (final item in list) _storeCard(context, item as Map<String, dynamic>)]);
