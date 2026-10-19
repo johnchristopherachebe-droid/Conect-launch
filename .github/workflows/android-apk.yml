@@ -1,0 +1,216 @@
+name: Build Android APK
+
+# Run it by hand: GitHub -> Actions -> "Build Android APK" -> Run workflow.
+# The finished APK appears under the repo's Releases (a plain .apk you can tap to install).
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Which app to build
+        type: choice
+        default: courier_app
+        options:
+          - courier_app
+          - vendor_app
+          - customer_app
+          - all
+      api_url:
+        description: Backend address starting with https:// (leave empty to use the API_URL repository variable)
+        required: false
+        default: ''
+      rider_background_location:
+        description: Rider app only. Keep sharing location with the screen off (shows a small notification)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(inputs.app == 'all' && '["courier_app","vendor_app","customer_app"]' || format('["{0}"]', inputs.app)) }}
+    env:
+      API_URL: ${{ inputs.api_url || vars.API_URL }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+    steps:
+      - name: Check the backend address
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "::error::No backend address. Add a repository variable named API_URL (Settings > Secrets and variables > Actions > Variables), or type it in when you run the workflow."
+            exit 1
+          fi
+          case "$API_URL" in
+            https://*) ;;
+            *) echo "::error::API_URL must start with https://"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # The repo has no android/ folder, so generate one for this build only.
+      - name: Generate the Android project
+        working-directory: ${{ matrix.app }}
+        run: |
+          NAME=$(grep -m1 '^name:' pubspec.yaml | awk '{print $2}')
+          flutter create --platforms android --org ng.cnnet --project-name "$NAME" .
+
+      - name: Set the app name and permissions
+        working-directory: ${{ matrix.app }}
+        run: |
+          case "${{ matrix.app }}" in
+            courier_app) LABEL="Cönëct Rider" ;;
+            vendor_app)  LABEL="Cönëct Vendor" ;;
+            *)           LABEL="Cönëct" ;;
+          esac
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i "s/android:label=\"[^\"]*\"/android:label=\"$LABEL\"/" "$M"
+          sed -i '0,/<application/s#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <application#' "$M"
+          grep -n "uses-permission\|android:label" "$M"
+
+      # Icon files live in the repo's branding/ folder (icon.png, icon_fg.png, icon_bg.png).
+      - name: Apply the app icon
+        working-directory: ${{ matrix.app }}
+        run: |
+          mkdir -p assets/icon
+          cp ../branding/icon.png ../branding/icon_fg.png ../branding/icon_bg.png assets/icon/
+          cat > flutter_launcher_icons.yaml <<'EOF'
+          flutter_launcher_icons:
+            android: true
+            ios: false
+            image_path: "assets/icon/icon.png"
+            adaptive_icon_background: "assets/icon/icon_bg.png"
+            adaptive_icon_foreground: "assets/icon/icon_fg.png"
+          EOF
+          flutter pub get
+          flutter pub add --dev flutter_launcher_icons
+          dart run flutter_launcher_icons
+
+      # Rider app: keep location updating when the screen is off, using a visible Android notification.
+      # This only edits the copy of the code on the build machine, never your repo.
+      - name: Rider background location
+        if: matrix.app == 'courier_app' && inputs.rider_background_location
+        working-directory: courier_app
+        run: |
+          python3 - <<'PY'
+          p = 'lib/jobs.dart'
+          s = open(p, encoding='utf-8').read()
+          def rep(old, new):
+              global s
+              if s.count(old) != 1:
+                  raise SystemExit('Could not patch lib/jobs.dart (' + str(s.count(old)) + ' matches for: ' + old[:60] + '). Re-run with rider_background_location turned off.')
+              s = s.replace(old, new)
+          rep("import 'package:geolocator/geolocator.dart';\n",
+              "import 'package:geolocator/geolocator.dart';\nimport 'package:geolocator_android/geolocator_android.dart';\n")
+          rep("    gps?.cancel();\n    super.dispose();",
+              "    gps?.cancel();\n    _stopBackground();\n    super.dispose();")
+          rep("    if (active.isEmpty && !online) return;\n",
+              "    if (active.isEmpty && !online) {\n      _stopBackground();\n      return;\n    }\n")
+          rep("      final p = await Geolocator.getCurrentPosition();\n",
+              "      _ensureBackground();\n      final fix = _lastFix;\n      final ts = fix?.timestamp as DateTime?;\n      final p = (fix != null && ts != null && DateTime.now().difference(ts).inSeconds < 60) ? fix : await Geolocator.getCurrentPosition();\n")
+          rep("  /// Shares location only while you are Available or have a delivery in progress.\n",
+              """  StreamSubscription<Position>? _bg;
+            Position? _lastFix;
+
+            /// Keeps location updating with the screen off by running a visible Android notification service.
+            void _ensureBackground() {
+              if (_bg != null) return;
+              try {
+                _bg = Geolocator.getPositionStream(
+                  locationSettings: AndroidSettings(
+                    accuracy: LocationAccuracy.high,
+                    distanceFilter: 10,
+                    intervalDuration: Duration(seconds: 10),
+                    foregroundNotificationConfig: ForegroundNotificationConfig(
+                      notificationTitle: 'Cönëct Rider',
+                      notificationText: 'Sharing your location while you are online or on a delivery',
+                      enableWakeLock: true,
+                    ),
+                  ),
+                ).listen((p) => _lastFix = p, onError: (_) {
+                  _bg?.cancel();
+                  _bg = null;
+                });
+              } catch (_) {}
+            }
+
+            void _stopBackground() {
+              _bg?.cancel();
+              _bg = null;
+              _lastFix = null;
+            }
+
+            /// Shares location only while you are Available or have a delivery in progress.
+          """)
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+
+      # Push notifications: only runs if you add a repository secret named GOOGLE_SERVICES_JSON
+      # (the contents of google-services.json from your Firebase project).
+      - name: Firebase push notifications
+        if: env.GOOGLE_SERVICES_JSON != '' && matrix.app != 'vendor_app'
+        working-directory: ${{ matrix.app }}
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          python3 - <<'PY'
+          import os, re
+          def pick(*names):
+              for n in names:
+                  if os.path.exists(n): return n
+              raise SystemExit('Gradle file not found: ' + ' or '.join(names))
+          settings = pick('android/settings.gradle.kts', 'android/settings.gradle')
+          app = pick('android/app/build.gradle.kts', 'android/app/build.gradle')
+          kts = settings.endswith('.kts')
+          s = open(settings, encoding='utf-8').read()
+          m = re.search(r'^([ \t]*)id\(?\s*["\']org\.jetbrains\.kotlin\.android["\'].*$', s, re.M)
+          if not m: raise SystemExit('Unsupported Gradle layout in ' + settings + '. Remove the GOOGLE_SERVICES_JSON secret to build without push.')
+          line = m.group(1) + ('id("com.google.gms.google-services") version "4.4.2" apply false' if kts else 'id "com.google.gms.google-services" version "4.4.2" apply false')
+          s = s[:m.start()] + line + '\n' + s[m.start():]
+          open(settings, 'w', encoding='utf-8').write(s)
+          a = open(app, encoding='utf-8').read()
+          m = re.search(r'^([ \t]*)id\(?\s*["\']dev\.flutter\.flutter-gradle-plugin["\']\)?.*$', a, re.M)
+          if not m: raise SystemExit('Unsupported Gradle layout in ' + app + '. Remove the GOOGLE_SERVICES_JSON secret to build without push.')
+          line = m.group(1) + ('id("com.google.gms.google-services")' if kts else 'id "com.google.gms.google-services"')
+          a = a[:m.end()] + '\n' + line + a[m.end():]
+          open(app, 'w', encoding='utf-8').write(a)
+          PY
+
+      - name: Build the release APK
+        working-directory: ${{ matrix.app }}
+        run: |
+          flutter pub get
+          flutter build apk --release --dart-define=API_URL="$API_URL"
+
+      - name: Name the APK
+        run: |
+          OUT="cnnet-${{ matrix.app }}-build${{ github.run_number }}.apk"
+          cp "${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk" "$OUT"
+          echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_FILE }}
+          path: ${{ env.APK_FILE }}
+
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "apk-${{ matrix.app }}-${{ github.run_number }}" "$APK_FILE" \
+            --prerelease \
+            --title "${{ matrix.app }} build ${{ github.run_number }}" \
+            --notes "Test build. Install by opening this file on an Android phone."
