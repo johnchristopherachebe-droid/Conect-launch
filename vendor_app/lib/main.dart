@@ -607,7 +607,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
           Text('${o['customer_name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
           Text('${o['line1']}, ${o['city']}', style: TextStyle(color: Theme.of(context).hintColor)),
           const SizedBox(height: 8),
-          Text(naira(o['total']), style: const TextStyle(color: conectPurple, fontWeight: FontWeight.w800, fontSize: 18)),
+          Text('You earn ${naira(o['vendor_net_amount'])}', style: const TextStyle(color: conectPurple, fontWeight: FontWeight.w800, fontSize: 18)),
           if (paid && status == 'placed') ...[
             const SizedBox(height: 10),
             SizedBox(width: double.infinity, child: FilledButton(onPressed: () => changeOrderStatus(o, 'preparing'), child: const Text('Start preparing'))),
