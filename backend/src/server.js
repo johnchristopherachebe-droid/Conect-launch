@@ -399,6 +399,8 @@ app.get('/stores', h(async (req, res) => {
        AND ($2::text IS NULL OR s.name ILIKE '%' || $2 || '%')
      ORDER BY s.name`, [category ?? null, search ?? null]);
   if(!hasLat) return res.json(rows);
+    const zones=(await q('SELECT center_lat,center_lng,radius_km FROM delivery_zones WHERE enabled=true')).rows;
+  if(zones.length&&!isInsideDeliveryZone(lat,lng,zones)) return res.json([]);
   const nearby=rows.filter(s=>s.lat!=null&&s.lng!=null).map(s=>({...s,distance_km:haversineKm(lat,lng,Number(s.lat),Number(s.lng))})).filter(s=>s.distance_km<=radiusKm).sort((a,b)=>a.distance_km-b.distance_km);
   res.json(nearby);
 }));
@@ -1109,18 +1111,20 @@ app.post('/devices/remove', requireAuth(), h(async (req, res) => {
 }));
 
 // ---------- Errors ----------
+function isInsideDeliveryZone(lat, lng, zones) {
+  return zones.some((zone) => haversineKm(Number(zone.center_lat), Number(zone.center_lng), Number(lat), Number(lng)) <= Number(zone.radius_km));
+}
+
 function assertAddressAllowedByZones(address, zones) {
   if (!zones.length) return;
   if (address.lat == null || address.lng == null) {
     throw httpError(400, 'Add your delivery address GPS location before checkout so we can confirm delivery coverage.');
   }
-  for (const zone of zones) {
-    const distance = haversineKm(Number(zone.center_lat),Number(zone.center_lng),Number(address.lat),Number(address.lng));
-    if (distance <= Number(zone.radius_km)) {
-      throw httpError(400, `We cannot deliver to this address because it is inside the “${zone.name}” no-delivery zone.`);
-    }
+  if (!isInsideDeliveryZone(address.lat, address.lng, zones)) {
+    throw httpError(400, 'Sorry, we do not deliver to this address yet. Please choose an address inside one of our delivery areas.');
   }
 }
+
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   const rad = (d) => d * Math.PI / 180;
