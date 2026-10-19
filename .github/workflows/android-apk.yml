@@ -230,7 +230,11 @@ jobs:
 
       - name: Name the APK
         run: |
-          OUT="cnnet-${{ matrix.app }}-build${{ github.run_number }}.apk"
+          case "${{ matrix.app }}" in
+            courier_app) OUT="cnnet-courier.apk" ;;
+            vendor_app)  OUT="cnnet-vendor.apk" ;;
+            *)           OUT="cnnet-customer.apk" ;;
+          esac
           cp "${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk" "$OUT"
           echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
 
@@ -239,11 +243,18 @@ jobs:
           name: ${{ env.APK_FILE }}
           path: ${{ env.APK_FILE }}
 
+      # Each app gets one release with a fixed address that always holds the newest build, e.g.
+      # https://github.com/OWNER/REPO/releases/download/android-courier_app/cnnet-courier.apk
+      # To publish somewhere else (a public repo), set the variable DOWNLOADS_REPO (owner/name)
+      # and the secret DOWNLOADS_TOKEN.
       - name: Publish to Releases
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DOWNLOADS_TOKEN || github.token }}
+          TARGET_REPO: ${{ vars.DOWNLOADS_REPO || github.repository }}
         run: |
-          gh release create "apk-${{ matrix.app }}-${{ github.run_number }}" "$APK_FILE" \
-            --prerelease \
-            --title "${{ matrix.app }} build ${{ github.run_number }}" \
-            --notes "Test build. Install by opening this file on an Android phone."
+          TAG="android-${{ matrix.app }}"
+          if ! gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$TARGET_REPO" --title "${{ matrix.app }} (Android)" --notes "Latest Android build." --latest=false
+          fi
+          gh release upload "$TAG" "$APK_FILE" --repo "$TARGET_REPO" --clobber
+          gh release edit "$TAG" --repo "$TARGET_REPO" --notes "Latest Android build: build ${{ github.run_number }}"
