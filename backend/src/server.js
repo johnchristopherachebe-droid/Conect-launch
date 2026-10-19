@@ -284,17 +284,17 @@ app.patch('/vendor/products/:id', requireAuth('vendor'), approvedVendor, h(async
 app.patch('/vendor/orders/:id/status', requireAuth('vendor'), approvedVendor, h(async(req,res)=>{
   const b=parse(z.object({status:z.enum(['preparing','ready'])}).strict(),req.body);
   const allowedFrom=b.status==='preparing'?'placed':'preparing';
-  const {rows}=await q(`UPDATE orders o SET status=$3,updated_at=now() FROM stores s WHERE o.store_id=s.id AND s.vendor_id=$1 AND o.id=$2 AND o.paid=true AND o.status=$4 RETURNING o.*`,[req.user.id,req.params.id,b.status,allowedFrom]);
+  const {rows}=await q(`UPDATE orders o SET status=$3,updated_at=now() FROM stores s WHERE o.store_id=s.id AND s.vendor_id=$1 AND o.id=$2 AND o.paid=true AND o.status=$4 RETURNING o.id,o.status,o.customer_id`,[req.user.id,req.params.id,b.status,allowedFrom]);
   if(!rows[0])return res.status(409).json({error:'Only paid orders belonging to your store can move to the next preparation status. Refresh and try again.'});
   const message=b.status==='preparing'?'The vendor is preparing your order.':'Your order is ready for courier pickup.';
   notifyUser(rows[0].customer_id,'Order update',message,{orderId:rows[0].id});
   if(b.status==='ready') dispatchTick().catch(e=>console.error('Dispatch after order ready failed:',e.message));
-  res.json(rows[0]);
+  res.json({ id: rows[0].id, status: rows[0].status }); // vendors never see what the customer paid
 }));
 
 app.get('/vendor/orders', requireAuth('vendor'), approvedVendor, h(async (req, res) => {
-  res.json((await q(
-    `SELECT o.id,o.status,o.paid,o.subtotal,o.delivery_fee,o.total,o.commission_rate,o.commission_amount,o.vendor_net_amount,o.created_at,u.name AS customer_name, a.line1,a.city
+    res.json((await q(
+    `SELECT o.id,o.status,o.paid,o.subtotal,o.commission_rate,o.commission_amount,o.vendor_net_amount,o.created_at,u.name AS customer_name, a.line1,a.city
      FROM orders o JOIN stores s ON s.id=o.store_id JOIN users u ON u.id=o.customer_id JOIN addresses a ON a.id=o.address_id
      WHERE s.vendor_id=$1 ORDER BY o.created_at DESC LIMIT 100`, [req.user.id])).rows);
 }));
