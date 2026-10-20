@@ -783,7 +783,7 @@ app.post('/courier/orders/:id/advance', requireAuth('courier'), approvedCourier,
     const upd = (await c.query(
       `UPDATE orders SET status=$3, updated_at=now() WHERE id=$1 AND courier_id=$2 AND status=$4 RETURNING *`,
       [req.params.id, req.user.id, NEXT[cur.status], cur.status])).rows;
-    if (upd[0] && upd[0].status === 'delivered') await creditOrderEarnings(c, upd[0].id);
+    if (upd[0] && ['picked_up', 'delivered'].includes(upd[0].status)) await creditOrderEarnings(c, upd[0].id);
     return upd;
   });
   if (!rows[0]) return res.status(409).json({ error: 'The order changed, please refresh' });
