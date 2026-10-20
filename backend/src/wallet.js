@@ -18,7 +18,7 @@ export async function creditOrderEarnings(client, orderId) {
   const o = (await client.query(
     `SELECT o.id,o.status,o.paid,o.courier_id,o.vendor_net_amount,o.delivery_fee,o.courier_share_percent,s.vendor_id
      FROM orders o JOIN stores s ON s.id=o.store_id WHERE o.id=$1`, [orderId])).rows[0];
-  if (!o || o.status !== 'delivered' || !o.paid) return { credited: false };
+  if (!o || !o.paid || !['picked_up', 'delivered'].includes(o.status)) return { credited: false };
   const vendorAmount = round2(o.vendor_net_amount);
   const courierAmount = round2(Number(o.delivery_fee) * Number(o.courier_share_percent) / 100);
   if (o.vendor_id && vendorAmount > 0) {
@@ -26,7 +26,7 @@ export async function creditOrderEarnings(client, orderId) {
       `INSERT INTO wallet_entries(user_id,order_id,kind,amount,note) VALUES($1,$2,'order_earning',$3,'Order earnings (after commission)')
        ON CONFLICT DO NOTHING`, [o.vendor_id, o.id, vendorAmount]);
   }
-  if (o.courier_id && courierAmount > 0) {
+  if (o.status === 'delivered' && o.courier_id && courierAmount > 0) {
     await client.query(
       `INSERT INTO wallet_entries(user_id,order_id,kind,amount,note) VALUES($1,$2,'delivery_earning',$3,'Delivery earnings')
        ON CONFLICT DO NOTHING`, [o.courier_id, o.id, courierAmount]);
