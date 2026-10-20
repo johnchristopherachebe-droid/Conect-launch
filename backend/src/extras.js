@@ -10,6 +10,13 @@ const ensureTables = () =>
       data BYTEA NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+      await q(`CREATE TABLE IF NOT EXISTS store_images (
+      store_id INT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+      mime_type TEXT NOT NULL,
+      data BYTEA NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+
     await q(`CREATE TABLE IF NOT EXISTS order_delivery_notes (
       order_id UUID PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
       note TEXT NOT NULL,
@@ -61,6 +68,36 @@ export function registerExtras(app, { approvedCourier, approvedVendor }) {
       `INSERT INTO product_images (product_id, mime_type, data) VALUES ($1,$2,$3)
        ON CONFLICT (product_id) DO UPDATE SET mime_type=EXCLUDED.mime_type, data=EXCLUDED.data, updated_at=now()`,
       [id, mime, buf],
+    );
+    res.json({ ok: true });
+  }));
+  // ---- Store (business) photos ----------------------------------------------
+  app.get('/stores/:id/image', h(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(404).json({ error: 'No photo' });
+    await ensureTables();
+    const row = (await q('SELECT mime_type, data FROM store_images WHERE store_id=$1', [id])).rows[0];
+    if (!row) return res.status(404).json({ error: 'No photo' });
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, no-cache');
+    res.type(row.mime_type).send(row.data);
+  }));
+
+  app.post('/vendor/store/image', requireAuth('vendor'), approvedVendor, h(async (req, res) => {
+    const { mime_type: mime, data_base64: b64 } = req.body ?? {};
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime) || typeof b64 !== 'string') {
+      return res.status(400).json({ error: 'Upload a JPG, PNG or WebP photo.' });
+    }
+    const buf = Buffer.from(b64, 'base64');
+    if (buf.length < 100 || buf.length > 1_500_000) return res.status(400).json({ error: 'Photo must be under 1.5 MB.' });
+    if (!looksLikeImage(buf, mime)) return res.status(400).json({ error: 'That file is not a valid image.' });
+    const store = (await q('SELECT id FROM stores WHERE vendor_id=$1', [req.user.id])).rows[0];
+    if (!store) return res.status(404).json({ error: 'Your store has not been created.' });
+    await ensureTables();
+    await q(
+      `INSERT INTO store_images (store_id, mime_type, data) VALUES ($1,$2,$3)
+       ON CONFLICT (store_id) DO UPDATE SET mime_type=EXCLUDED.mime_type, data=EXCLUDED.data, updated_at=now()`,
+      [store.id, mime, buf],
     );
     res.json({ ok: true });
   }));
