@@ -5,6 +5,7 @@ import '../brand.dart';
 import '../state.dart';
 import 'home.dart' show cartBar;
 import 'product_image.dart';
+import 'store_image.dart';
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -99,13 +100,7 @@ class _StoreScreenState extends State<StoreScreen> {
                     Padding(
                       padding: const EdgeInsets.only(left: 12),
                       child: Row(children: [
-                        Container(
-                          width: 68,
-                          height: 68,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(color: conectLavender, borderRadius: BorderRadius.circular(20)),
-                          child: Text(st['emoji'] ?? '🏪', style: const TextStyle(fontSize: 34)),
-                        ),
+                      StoreImage(storeId: st['id'], emoji: st['emoji'] ?? '🏪', size: 68, radius: 20),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
