@@ -459,7 +459,27 @@ class _VendorDashboardState extends State<VendorDashboard> {
       msg(cleanError(e));
     }
   }
-
+  Future<void> uploadStoreImage() async {
+    try {
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.custom, allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'], withData: true);
+      if (result == null) return;
+      final bytes = result.files.single.bytes;
+      if (bytes == null || bytes.isEmpty) throw Exception('Could not read the selected photo.');
+      msg('Preparing photo…');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) throw Exception('That file is not a supported image. Use JPG, PNG or WebP.');
+      final upright = img.bakeOrientation(decoded);
+      final small = upright.width > 900 ? img.copyResize(upright, width: 900) : upright;
+      final jpg = img.encodeJpg(small, quality: 82);
+      await widget.api.send('POST', '/vendor/store/image', {'mime_type': 'image/jpeg', 'data_base64': base64Encode(jpg)});
+      if (mounted) setState(() => imgVersion++);
+      msg('Business photo saved.');
+    } catch (e) {
+      msg(cleanError(e));
+    }
+  }
   Future<void> setProductAvailable(dynamic p, bool v) async {
     try {
       await widget.api.send('PATCH', '/vendor/products/${p['id']}', {'available': v});
@@ -724,6 +744,29 @@ class _VendorDashboardState extends State<VendorDashboard> {
             subtitle: Text(store['is_open'] == true ? 'Open for orders' : 'Closed. Customers can’t order.'),
             value: store['is_open'] == true,
             onChanged: setStoreOpen,
+          ),
+        ),
+      if (store is Map)
+        Card(
+          child: ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: Image.network(
+                  '$apiUrl/stores/${store['id']}/image?v=$imgVersion',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: conectLavender,
+                    child: const Icon(Icons.add_a_photo_outlined, color: conectPurple),
+                  ),
+                ),
+              ),
+            ),
+            title: const Text('Business photo', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Shown to customers on your store.'),
+            trailing: TextButton(onPressed: uploadStoreImage, child: const Text('Change')),
           ),
         ),
       if (profile is Map)
