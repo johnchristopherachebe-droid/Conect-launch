@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS addresses (
 CREATE TABLE IF NOT EXISTS stores (
   id           SERIAL PRIMARY KEY,
   name         TEXT NOT NULL,
-  category     TEXT NOT NULL CHECK (category IN ('food','groceries','pharmacy','courier')),
+  category     TEXT NOT NULL CHECK (category IN ('food','groceries','pharmacy','fashion','gadgets','beauty','courier')),
   emoji        TEXT,
   eta_minutes  INT NOT NULL DEFAULT 30,
   delivery_fee NUMERIC(8,2) NOT NULL DEFAULT 1.99,
@@ -324,3 +324,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_withdrawal_one_open ON withdrawal_requests(
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_share_percent NUMERIC(5,2) NOT NULL DEFAULT 100.00;
 INSERT INTO app_settings(key,value) VALUES ('courier_share_percent','100'),('min_withdrawal','1000')
 ON CONFLICT(key) DO NOTHING;
+
+
+-- Marketplace categories. A store has one primary category plus a list of all its categories.
+ALTER TABLE stores DROP CONSTRAINT IF EXISTS stores_category_check;
+ALTER TABLE stores ADD CONSTRAINT stores_category_check
+  CHECK (category IN ('food','groceries','pharmacy','fashion','gadgets','beauty','courier'));
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS categories TEXT[];
+UPDATE stores SET categories = ARRAY[category] WHERE categories IS NULL;
+ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS business_types TEXT[];
+UPDATE vendor_profiles SET business_types = ARRAY[business_type] WHERE business_types IS NULL;
