@@ -704,7 +704,10 @@ class _VendorDashboardState extends State<VendorDashboard> {
               ),
               title: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text(naira(p['price']), style: const TextStyle(color: conectPurple, fontWeight: FontWeight.w700)),
-              trailing: Switch(value: p['available'] == true, onChanged: (v) => setProductAvailable(p, v)),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Edit', onPressed: () => editProduct(p)),
+                Switch(value: p['available'] == true, onChanged: (v) => setProductAvailable(p, v)),
+              ]),
             ),
           ),
 
