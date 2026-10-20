@@ -191,19 +191,24 @@ app.get('/vendor/profile', requireAuth('vendor'), h(async (req, res) => {
   res.json({ profile, store, approved: Boolean(status?.vendor_approved) });
 }));
 
+const BUSINESS_TYPES = ['food','groceries','pharmacy','fashion','gadgets','beauty'];
+
 app.put('/vendor/profile', requireAuth('vendor'), h(async (req, res) => {
   const b = parse(z.object({
     business_name: z.string().trim().min(2).max(120),
-    business_type: z.enum(['food','groceries','pharmacy']).default('food'),
+    business_types: z.array(z.enum(BUSINESS_TYPES)).min(1).max(BUSINESS_TYPES.length).optional(),
+    business_type: z.enum(BUSINESS_TYPES).optional(),
     phone: z.string().trim().max(30).optional(),
     address: z.string().trim().min(5).max(300),
     registration_number: z.string().trim().max(100).optional(),
   }), req.body);
+  const types = [...new Set(b.business_types ?? [b.business_type ?? 'food'])];
   const { rows } = await q(
-    `INSERT INTO vendor_profiles (user_id,business_name,business_type,phone,address,registration_number)
-     VALUES ($1,$2,$3,$4,$5,$6)
-     ON CONFLICT (user_id) DO UPDATE SET business_name=$2,business_type=$3,phone=$4,address=$5,registration_number=$6,updated_at=now()
-     RETURNING *`, [req.user.id,b.business_name,b.business_type,b.phone ?? null,b.address,b.registration_number ?? null]);
+    `INSERT INTO vendor_profiles (user_id,business_name,business_type,business_types,phone,address,registration_number)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (user_id) DO UPDATE SET business_name=$2,business_type=$3,business_types=$4,phone=$5,address=$6,registration_number=$7,updated_at=now()
+     RETURNING *`, [req.user.id,b.business_name,types[0],types,b.phone ?? null,b.address,b.registration_number ?? null]);
+  await q('UPDATE stores SET category=$2,categories=$3 WHERE vendor_id=$1', [req.user.id,types[0],types]);
   res.status(200).json(rows[0]);
 }));
 
@@ -253,9 +258,9 @@ app.post('/vendor/store', requireAuth('vendor'), h(async (req, res) => {
   const existing = (await q('SELECT id FROM stores WHERE vendor_id=$1', [req.user.id])).rows[0];
   if (existing) return res.status(409).json({ error: 'A store is already linked to this vendor account.' });
   const { rows } = await q(
-    `INSERT INTO stores (name,category,emoji,eta_minutes,delivery_fee,is_open,lat,lng,vendor_id)
-     VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8) RETURNING *`,
-    [profile.business_name,profile.business_type,b.emoji,b.eta_minutes,b.delivery_fee,b.lat ?? null,b.lng ?? null,req.user.id]);
+    `INSERT INTO stores (name,category,categories,emoji,eta_minutes,delivery_fee,is_open,lat,lng,vendor_id)
+     VALUES ($1,$2,$9,$3,$4,$5,false,$6,$7,$8) RETURNING *`,
+    [profile.business_name,profile.business_type,b.emoji,b.eta_minutes,b.delivery_fee,b.lat ?? null,b.lng ?? null,req.user.id,profile.business_types?.length ? profile.business_types : [profile.business_type]]);
   res.status(201).json({ ...rows[0], message: 'Store created as closed pending admin approval.' });
 }));
 
@@ -395,7 +400,7 @@ app.get('/stores', h(async (req, res) => {
   const { rows } = await q(
     `SELECT s.*,COALESCE(r.average_rating,0) AS average_rating,COALESCE(r.rating_count,0)::int AS rating_count FROM stores s
      LEFT JOIN LATERAL (SELECT round(avg(stars)::numeric,1) AS average_rating,count(*) AS rating_count FROM order_ratings WHERE store_id=s.id) r ON true
-     WHERE s.is_open AND ($1::text IS NULL OR s.category = $1)
+     WHERE s.is_open AND ($1::text IS NULL OR s.category = $1 OR $1 = ANY(s.categories))
        AND ($2::text IS NULL OR s.name ILIKE '%' || $2 || '%')
      ORDER BY s.name`, [category ?? null, search ?? null]);
   if(!hasLat) return res.json(rows);
@@ -828,7 +833,7 @@ app.post('/admin/support/users', adminOnly, h(async (req,res)=>{
     res.status(201).json(rows[0]);
   } catch(e) { if (e.code==='23505') return res.status(409).json({error:'That email is already registered'}); throw e; }
 }));
-const CATEGORIES = z.enum(['food', 'groceries', 'pharmacy', 'courier']);
+const CATEGORIES = z.enum(['food', 'groceries', 'pharmacy', 'fashion', 'gadgets', 'beauty', 'courier']);
 
 // Build "UPDATE ... SET a=$1, b=$2" from only the fields that were sent.
 async function patchRow(table, id, data) {
@@ -1055,13 +1060,13 @@ app.patch('/admin/vendors/:id/approval', adminOnly, h(async (req, res) => {
     // Lock the vendor record so concurrent admin actions cannot approve based on stale review state.
     const existing=(await client.query("SELECT id FROM users WHERE id=$1 AND role='vendor' FOR UPDATE",[req.params.id])).rows[0];
     if(!existing) return {notFound:true};
-    const check = (await client.query('SELECT v.business_name,v.business_type,v.government_id_status,v.food_safety_status,v.orientation_completed FROM vendor_profiles v WHERE v.user_id=$1',[req.params.id])).rows[0];
+    const check = (await client.query('SELECT v.business_name,v.business_type,v.business_types,v.government_id_status,v.food_safety_status,v.orientation_completed FROM vendor_profiles v WHERE v.user_id=$1',[req.params.id])).rows[0];
     const orientation = b.orientation_completed ?? check?.orientation_completed;
     if (b.approved) {
       const docs=(await client.query(`SELECT DISTINCT ON(document_type) document_type,review_status FROM verification_documents WHERE user_id=$1 AND document_type IN ('government_id','food_safety') ORDER BY document_type,created_at DESC,id DESC`,[req.params.id])).rows;
       const latest=Object.fromEntries(docs.map(d=>[d.document_type,d.review_status]));
       if (!check) throw httpError(409, 'Vendor must submit a business profile before approval.');
-      if (!orientation || check.government_id_status !== 'approved' || latest.government_id !== 'approved' || (check.business_type === 'food' && (check.food_safety_status !== 'approved' || latest.food_safety !== 'approved')))
+      if (!orientation || check.government_id_status !== 'approved' || latest.government_id !== 'approved' || ((check.business_types ?? [check.business_type]).includes('food') && (check.food_safety_status !== 'approved' || latest.food_safety !== 'approved')))
         throw httpError(409, 'Approval requires verified government ID, applicable food-safety approval, and completed orientation. Save those review results first.');
     }
     // Persist orientation/review notes before setting the privilege flag, in the same transaction.
