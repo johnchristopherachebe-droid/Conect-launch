@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image/image.dart' as img;
 import 'brand.dart';
+import 'category_picker.dart'; 
 import 'main.dart' show Api, cleanError;
 
 (String, Color) _docStatus(String s) {
@@ -38,7 +39,7 @@ class VendorApplication extends StatefulWidget {
 
 class _VendorApplicationState extends State<VendorApplication> {
   final name = TextEditingController(), phone = TextEditingController(), address = TextEditingController(), reg = TextEditingController();
-  String bizType = 'food';
+  List<String> bizTypes = ['food'];
   double? lat, lng;
   bool busy = false;
   int? open; // null = open the first unfinished step automatically, -1 = all closed
@@ -73,14 +74,14 @@ class _VendorApplicationState extends State<VendorApplication> {
     phone.text = (p['phone'] ?? '').toString();
     address.text = (p['address'] ?? '').toString();
     reg.text = (p['registration_number'] ?? '').toString();
-    final t = p['business_type'];
-    bizType = ['food', 'groceries', 'pharmacy'].contains(t) ? t as String : 'food';
+    final t = p['business_types'] is List ? p['business_types'] as List : [p['business_type']];
+    bizTypes = [for (final x in t) if (vendorCategories.containsKey(x)) x as String];
+    if (bizTypes.isEmpty) bizTypes = ['food'];
   }
 
   void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  bool get _isFood => (profile?['business_type'] ?? 'food') == 'food';
-
+  bool get _isFood => bizTypes.contains('food');
   String _docState(String type) {
     final p = profile;
     if (p == null) return 'not_submitted';
@@ -106,13 +107,14 @@ class _VendorApplicationState extends State<VendorApplication> {
   }
 
   Future<void> _saveProfile() async {
+    if (bizTypes.isEmpty) return _toast('Choose at least one category.');
     if (name.text.trim().length < 2 || address.text.trim().length < 5) {
       return _toast('Enter your business name and address.');
     }
     await _run(() async {
       await widget.api.send('PUT', '/vendor/profile', {
         'business_name': name.text.trim(),
-        'business_type': bizType,
+        'business_types': bizTypes,
         'phone': phone.text.trim(),
         'address': address.text.trim(),
         'registration_number': reg.text.trim(),
@@ -230,16 +232,7 @@ class _VendorApplicationState extends State<VendorApplication> {
   Widget _profileBody() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         TextField(controller: name, decoration: const InputDecoration(labelText: 'Business name')),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          value: bizType,
-          items: const [
-            DropdownMenuItem(value: 'food', child: Text('Food / pastries')),
-            DropdownMenuItem(value: 'groceries', child: Text('Groceries')),
-            DropdownMenuItem(value: 'pharmacy', child: Text('Pharmacy')),
-          ],
-          onChanged: (v) => setState(() => bizType = v ?? 'food'),
-          decoration: const InputDecoration(labelText: 'Business type'),
-        ),
+        CategoryPicker(selected: bizTypes, onChanged: (v) => setState(() => bizTypes = v)),
         const SizedBox(height: 12),
         TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Business phone')),
         const SizedBox(height: 12),
