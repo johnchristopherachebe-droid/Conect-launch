@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'brand.dart';
 import 'package:image/image.dart' as img;
 import 'application.dart';
+import 'category_picker.dart';
 import 'onboarding.dart';
 import 'wallet.dart';
 
@@ -286,7 +287,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
   int tab = 0;
   int imgVersion = 0;
   Timer? timer;
-  String bizType = 'food';
+  List<String> bizTypes = ['food'];
   final name = TextEditingController(),
       phone = TextEditingController(),
       address = TextEditingController(),
@@ -333,7 +334,9 @@ class _VendorDashboardState extends State<VendorDashboard> {
       final profile = p['profile'];
       if (!quiet && profile is Map) {
         name.text = profile['business_name'] ?? '';
-        bizType = ['food', 'groceries', 'pharmacy'].contains(profile['business_type']) ? profile['business_type'] : 'food';
+        final bt = profile['business_types'] is List ? profile['business_types'] as List : [profile['business_type']];
+        bizTypes = [for (final x in bt) if (vendorCategories.containsKey(x)) x as String];
+        if (bizTypes.isEmpty) bizTypes = ['food'];
         phone.text = profile['phone'] ?? '';
         address.text = profile['address'] ?? '';
         reg.text = profile['registration_number'] ?? '';
@@ -348,10 +351,11 @@ class _VendorDashboardState extends State<VendorDashboard> {
   }
 
   Future<void> saveProfile() async {
+  if (bizTypes.isEmpty) return msg('Choose at least one category.');
     try {
       await widget.api.send('PUT', '/vendor/profile', {
         'business_name': name.text.trim(),
-        'business_type': bizType,
+        'business_types': bizTypes,
         'phone': phone.text.trim(),
         'address': address.text.trim(),
         'registration_number': reg.text.trim(),
@@ -777,7 +781,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
               const Text('Business profile', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
               const SizedBox(height: 10),
               Text('${profile['business_name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text('${profile['business_type'] ?? ''} · ${profile['phone'] ?? ''}'),
+              Text('${profile['business_types'] is List ? (profile['business_types'] as List).join(', ') : (profile['business_type'] ?? '')} · ${profile['phone'] ?? ''}'),
               Text('${profile['address'] ?? ''}'),
             ]),
           ),
@@ -809,16 +813,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
                 const SizedBox(height: 12),
                 TextField(controller: name, decoration: const InputDecoration(labelText: 'Business name')),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: bizType,
-                  items: const [
-                    DropdownMenuItem(value: 'food', child: Text('Food / pastries')),
-                    DropdownMenuItem(value: 'groceries', child: Text('Groceries')),
-                    DropdownMenuItem(value: 'pharmacy', child: Text('Pharmacy')),
-                  ],
-                  onChanged: (v) => setState(() => bizType = v ?? 'food'),
-                  decoration: const InputDecoration(labelText: 'Business type'),
-                ),
+                CategoryPicker(selected: bizTypes, onChanged: (v) => setState(() => bizTypes = v)),
                 const SizedBox(height: 12),
                 TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Business phone')),
                 const SizedBox(height: 12),
@@ -871,7 +866,7 @@ class _VendorDashboardState extends State<VendorDashboard> {
                     icon: const Icon(Icons.badge_outlined),
                     label: const Text('Upload government ID'),
                   ),
-                  if (bizType == 'food')
+                  if (bizTypes.contains('food'))
                     OutlinedButton.icon(
                       onPressed: profile == null ? null : () => uploadDocument('food_safety'),
                       icon: const Icon(Icons.health_and_safety_outlined),
