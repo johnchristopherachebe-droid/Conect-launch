@@ -308,13 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(children: [
-            Container(
-              width: 64,
-              height: 64,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: conectLavender, borderRadius: BorderRadius.circular(16)),
-              child: Text(st['emoji'] ?? '🏪', style: const TextStyle(fontSize: 32)),
-            ),
+            StoreImage(storeId: st['id'], emoji: st['emoji'] ?? '🏪'),
             const SizedBox(width: 14),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
