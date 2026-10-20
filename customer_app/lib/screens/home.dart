@@ -26,12 +26,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const cats = {'All': null, 'Food': 'food', 'Groceries': 'groceries', 'Pharmacy': 'pharmacy', 'Courier': 'courier'};
+  static const cats = {'All': null, 'Food': 'food', 'Groceries': 'groceries', 'Pharmacy': 'pharmacy', 'Fashion': 'fashion', 'Gadgets': 'gadgets', 'Beauty': 'beauty', 'Courier': 'courier'};
   static const catIcons = {
     'All': Icons.apps_rounded,
     'Food': Icons.restaurant_rounded,
     'Groceries': Icons.shopping_basket_rounded,
     'Pharmacy': Icons.local_pharmacy_rounded,
+    'Fashion': Icons.checkroom_rounded,
+    'Gadgets': Icons.devices_rounded,
+    'Beauty': Icons.face_retouching_natural_rounded,
     'Courier': Icons.delivery_dining_rounded,
   };
   String cat = 'All', search = '';
@@ -138,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       reload();
                     },
                     decoration: InputDecoration(
-                      hintText: 'Search for food, groceries, pharmacy…',
+                      hintText: 'Search food, groceries, fashion, gadgets…',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
