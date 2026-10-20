@@ -9,6 +9,7 @@ import 'orders.dart';
 import 'store.dart';
 import 'support.dart';
 import 'account.dart';
+import 'store_image.dart';
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
