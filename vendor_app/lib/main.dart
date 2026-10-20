@@ -468,6 +468,41 @@ class _VendorDashboardState extends State<VendorDashboard> {
       msg(cleanError(e));
     }
   }
+  Future<void> editProduct(dynamic p) async {
+    final v = double.tryParse('${p['price']}') ?? 0;
+    final nameC = TextEditingController(text: '${p['name']}');
+    final priceC = TextEditingController(text: v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit product'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Product name')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: priceC,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Price (₦)'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final newName = nameC.text.trim();
+    final newPrice = double.tryParse(priceC.text.trim());
+    if (newName.isEmpty || newPrice == null || newPrice < 0) return msg('Enter a product name and a valid price.');
+    try {
+      await widget.api.send('PATCH', '/vendor/products/${p['id']}', {'name': newName, 'price': newPrice});
+      await load();
+      msg('Product updated.');
+    } catch (e) {
+      msg(cleanError(e));
+    }
+  }
 
   Future<void> setStoreOpen(bool v) async {
     try {
