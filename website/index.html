@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cönëct – Food, groceries and errands delivered to your door</title>
-<meta name="description" content="Order food and groceries from local stores and get them delivered by a verified rider. Cönëct also lets stores and riders earn and withdraw to their bank.">
+<title>Cönëct – Food, groceries, fashion, gadgets and more delivered to your door</title>
+<meta name="description" content="Order food, groceries, pharmacy, fashion, phones and beauty products from local stores and get them delivered by a verified rider. Cönëct also lets stores and riders earn and withdraw to their bank.">
 <meta name="theme-color" content="#2A0F55">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%237C3AED'/%3E%3Ctext x='50' y='68' font-size='58' font-weight='800' text-anchor='middle' fill='white' font-family='Arial'%3Ec%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,8 +66,8 @@ h2.big{font-size:clamp(2rem,4.6vw,3.2rem);font-weight:800;color:var(--deep)}
 .sec-head p{margin-top:14px;color:var(--mute);font-size:1.1rem}
 
 .things{display:grid;grid-template-columns:repeat(3,1fr);border-top:2px solid var(--ink)}
-.things > div{padding:28px 28px 32px 0}
-.things > div + div{padding-left:28px;border-left:1px solid var(--line)}
+.things > div{padding:28px 28px 32px 0;border-bottom:1px solid var(--line)}
+.things > div:not(:nth-child(3n+1)){padding-left:28px;border-left:1px solid var(--line)}
 .things h3{font-size:1.9rem;font-weight:800;margin-bottom:10px}
 .things p{color:var(--mute)}
 
@@ -109,8 +109,7 @@ footer a{color:var(--mute)}
   .hero{padding:44px 0 64px}
   .hero .wrap,.earn{grid-template-columns:1fr}
   .things{grid-template-columns:1fr}
-  .things > div,.things > div + div{padding:24px 0;border-left:0}
-  .things > div + div{border-top:1px solid var(--line)}
+  .things > div,.things > div:not(:nth-child(3n+1)){padding:24px 0;border-left:0}
   .steps{grid-template-columns:1fr 1fr}
   nav .hide-sm{display:none}
   section{padding:60px 0}
@@ -157,7 +156,7 @@ footer a{color:var(--mute)}
     <div class="wrap">
       <div>
         <h1>Whatever you need, at your door.</h1>
-        <p class="lead">Order food and groceries from stores near you. A verified rider brings it over, and the delivery only counts once you give them your PIN.</p>
+        <p class="lead">Order food, groceries, fashion, gadgets and more from stores near you. A verified rider brings it over, and the delivery only counts once you give them your PIN.</p>
         <div class="cta">
           <a class="btn main" data-link="customer" href="#">Order now</a>
           <a class="btn alt" href="#earn">Sell or ride with us</a>
@@ -178,13 +177,17 @@ footer a{color:var(--mute)}
     <div class="wrap">
       <div class="sec-head">
         <h2 class="big">Order from stores around you.</h2>
-        <p>Browse real menus, pay securely online and follow your rider on the map.</p>
+        <p>Browse real stores, pay securely online and follow your rider on the map. We deliver inside our active delivery areas, and we tell you before you pay if your address is outside them.</p>
       </div>
       <div class="things">
         <div><h3>Food</h3><p>Hot meals from restaurants and kitchens near you, prepared when you order.</p></div>
         <div><h3>Groceries</h3><p>Everyday items from local shops, picked and brought to you the same day.</p></div>
-        <div><h3>Courier</h3><p>Need something collected and delivered? A rider can carry it across town for you.</p></div>
+        <div><h3>Pharmacy</h3><p>Health and personal care products from local pharmacies.</p></div>
+        <div><h3>Fashion</h3><p>Clothes, shoes, bags and accessories from local sellers.</p></div>
+        <div><h3>Phones &amp; gadgets</h3><p>Phones, chargers and small electronics, delivered to you.</p></div>
+        <div><h3>Beauty</h3><p>Makeup, skincare and hair products from beauty stores nearby.</p></div>
       </div>
+      <p style="margin-top:28px;color:var(--mute)"><b>Need something collected?</b> A rider can carry a package across town for you.</p>
     </div>
   </section>
 
@@ -207,16 +210,17 @@ footer a{color:var(--mute)}
     <div class="wrap">
       <div class="sec-head">
         <h2 class="big">Run a store or ride? Earn with Cönëct.</h2>
-        <p>Every delivered order adds to your wallet. Withdraw to your bank account when you are ready.</p>
+        <p>Every order adds to your wallet. Withdraw to your bank account when you are ready.</p>
       </div>
       <div class="earn">
         <div class="panel sell">
           <h3>Sell on Cönëct</h3>
-          <p>Put your menu in front of customers nearby and let Cönëct handle payment and delivery.</p>
+          <p>Put your store in front of customers nearby and let Cönëct handle payment and delivery.</p>
           <ul>
-            <li>Add products with photos and set your store open or closed</li>
-            <li>Cönëct takes a small commission on food sales only, never on delivery</li>
-            <li>See your earnings and every payout in your wallet</li>
+            <li>Pick every category you sell in when you sign up: food, groceries, pharmacy, fashion, gadgets or beauty</li>
+            <li>Add products with photos, change names and prices any time, and show your business photo</li>
+            <li>Get paid into your wallet as soon as the rider picks up the order</li>
+            <li>Cönëct takes a small commission on product sales only, never on delivery</li>
           </ul>
           <a class="btn main" data-link="vendor" href="#">Open your store</a>
         </div>
@@ -243,12 +247,12 @@ footer a{color:var(--mute)}
       <div class="apps-grid">
         <div class="app-card feature">
           <h3>Customer app</h3>
-          <p>Order food and groceries, pay securely and track your rider.</p>
+          <p>Order food, groceries, fashion and gadgets, pay securely and track your rider.</p>
           <a class="btn main" data-link="apk_customer" href="#">Download for Android</a>
         </div>
         <div class="app-card">
           <h3>Vendor app</h3>
-          <p>Run your store: manage products, take orders and see your wallet.</p>
+          <p>Run your store: manage products and prices, add your business photo, take orders and see your wallet.</p>
           <a class="btn main" data-link="apk_vendor" href="#">Download for Android</a>
         </div>
         <div class="app-card">
@@ -264,7 +268,7 @@ footer a{color:var(--mute)}
   <div class="final">
     <div class="wrap">
       <div class="box">
-        <h2>Hungry? Your first order is a few taps away.</h2>
+        <h2>Whatever you need, your first order is a few taps away.</h2>
         <p>Pick a store near you and we will bring it over.</p>
         <a class="btn" data-link="customer" href="#">Order now</a>
       </div>
