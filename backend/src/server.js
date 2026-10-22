@@ -13,6 +13,7 @@ import { sign, requireAuth } from './auth.js';
 import { notifyUser } from './push.js';
 import { startDispatch, dispatchTick } from './dispatch.js';
 import { registerWallet, creditOrderEarnings, reverseOrderEarnings, restoreOrderEarnings } from './wallet.js';
+import { gateways, gatewayCodes, isConfigured, publicInfo } from './gateways.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind Caddy: use the real client IP for rate limits
@@ -542,10 +543,26 @@ app.post('/orders/:id/cancel', requireAuth('customer'), h(async (req, res) => {
   res.json({ ...o, refund, refund_status:refund, refundMessage: refundResult.kind === 'uncertain' ? 'Refund status is being reconciled. Do not retry until the Paystack dashboard has been checked.' : undefined });
 }));
 
-// ---------- Payments (Paystack, NGN) ----------
+// ---------- Payments (NGN; gateways are switched on/off by admins in the panel) ----------
+async function enabledGateways() {
+  await q(`INSERT INTO payment_gateways(code,enabled,sort_order) SELECT c,(c='paystack'),100 FROM unnest($1::text[]) AS c ON CONFLICT (code) DO NOTHING`, [gatewayCodes]);
+  const { rows } = await q('SELECT code,enabled FROM payment_gateways ORDER BY sort_order, code');
+  return rows.filter((r) => r.enabled && isConfigured(r.code)).map((r) => r.code);
+}
+
+app.get('/payment-gateways', requireAuth('customer'), h(async (_req, res) => {
+  res.json((await enabledGateways()).map(publicInfo));
+}));
+
 app.post('/orders/:id/pay', payLimiter, requireAuth('customer'), h(async (req, res) => {
+  const b = parse(z.object({ gateway: z.string().trim().max(30).optional() }).strict(), req.body ?? {});
+  const available = await enabledGateways();
+  const code = b.gateway ?? available[0];
+  if (!code || !available.includes(code)) {
+    return res.status(409).json({ error: b.gateway ? 'That payment method is not available right now. Please choose another.' : 'No payment method is available right now. Please try again later.' });
+  }
   const { rows } = await q(
-    `SELECT o.id, o.total, o.paid, o.status, u.email
+    `SELECT o.id, o.total, o.paid, o.status, o.customer_id, u.email
      FROM orders o JOIN users u ON u.id = o.customer_id
      WHERE o.id = $1 AND o.customer_id = $2`, [req.params.id, req.user.id]);
   const o = rows[0];
@@ -554,27 +571,38 @@ app.post('/orders/:id/pay', payLimiter, requireAuth('customer'), h(async (req, r
   if (o.status === 'cancelled') return res.status(409).json({ error: 'This order was cancelled' });
   const amountKobo = Math.round(Number(o.total) * 100);
   if (!Number.isSafeInteger(amountKobo) || amountKobo < 1) return res.status(409).json({ error: 'This order has an invalid payment amount. Contact support.' });
-  // Each initialization is recorded before leaving our server. This lets verification
-  // reject forged/untracked references and lets us refund late/duplicate successful charges.
   const reference = `cnct-${o.id}-${crypto.randomUUID()}`;
-  await q(`INSERT INTO payment_attempts(reference,order_id,amount_kobo,status) VALUES($1,$2,$3,'initializing')`, [reference,o.id,amountKobo]);
+  await q(`INSERT INTO payment_attempts(reference,order_id,amount_kobo,status,gateway) VALUES($1,$2,$3,'initializing',$4)`, [reference,o.id,amountKobo,code]);
   try {
-    const d = await paystack('POST', '/transaction/initialize', {
-      email: o.email,
-      amount: amountKobo,
-      currency: 'NGN',
-      reference,
-      callback_url: `${process.env.PUBLIC_URL}/payment/done`,
-      metadata: { order_id: o.id },
+    const d = await gateways[code].initialize({
+      order: { id: o.id, customerId: o.customer_id },
+      reference, amountKobo, email: o.email, publicUrl: process.env.PUBLIC_URL,
     });
-    if (d.reference !== reference || !d.authorization_url) throw httpError(502, 'The payment provider returned an invalid checkout response. Please try again.');
     await q(`UPDATE payment_attempts SET status='initialized',updated_at=now() WHERE reference=$1 AND status='initializing'`, [reference]);
-    res.json({ url: d.authorization_url, reference: d.reference });
+    res.json({ url: d.url, reference: d.reference, gateway: code });
   } catch (e) {
     await q(`UPDATE payment_attempts SET status='failed',updated_at=now() WHERE reference=$1 AND status='initializing'`, [reference]).catch(()=>{});
     throw e;
   }
 }));
+
+app.get('/admin/gateways', adminOnly, h(async (_req, res) => {
+  await enabledGateways();
+  const { rows } = await q('SELECT code,enabled,updated_at FROM payment_gateways ORDER BY sort_order, code');
+  res.json(rows.filter((r) => gateways[r.code]).map((r) => ({ ...publicInfo(r.code), enabled: r.enabled, configured: isConfigured(r.code), updated_at: r.updated_at })));
+}));
+
+app.patch('/admin/gateways/:code', adminOnly, h(async (req, res) => {
+  const code = req.params.code;
+  if (!gateways[code]) return res.status(404).json({ error: 'Unknown payment gateway' });
+  const b = parse(z.object({ enabled: z.boolean() }).strict(), req.body);
+  const available = await enabledGateways();
+  if (b.enabled && !isConfigured(code)) return res.status(409).json({ error: `${gateways[code].name} cannot be switched on until its keys are set on the server.` });
+  if (!b.enabled && !available.filter((c) => c !== code).length) return res.status(409).json({ error: 'At least one working payment gateway must stay switched on, or customers cannot pay.' });
+  await q('UPDATE payment_gateways SET enabled=$2, updated_by=$3, updated_at=now() WHERE code=$1', [code, b.enabled, req.user.id]);
+  res.json({ code, enabled: b.enabled });
+}));
+
 
 // Paystack sends the customer here after paying. We confirm with Paystack directly,
 // so this also works in local testing where webhooks cannot reach your computer.
@@ -586,8 +614,12 @@ app.get('/payment/done', h(async (req, res) => {
       const paid = await confirmPayment(req.query.reference);
       if (paid) { heading = 'Payment successful'; message = 'Your payment has been verified. You can return to the Cönëct app.'; }
       else {
-        const d = await paystack('GET', `/transaction/verify/${encodeURIComponent(req.query.reference)}`);
-        if (d.status !== 'success') { heading = 'Payment not completed'; message = 'No successful payment was confirmed. Return to Cönëct to review your order.'; }
+          const attempt = (await q('SELECT gateway FROM payment_attempts WHERE reference=$1', [req.query.reference])).rows[0];
+        if (attempt && gateways[attempt.gateway]) {
+          const d = await gateways[attempt.gateway].verify(req.query.reference);
+          if (d.state === 'pending') { heading = 'Payment pending'; message = 'We have not received confirmation yet. Transfers and USSD can take a moment. Check your order in Cönëct shortly.'; }
+          else if (d.state !== 'paid') { heading = 'Payment not completed'; message = 'No successful payment was confirmed. Return to Cönëct to review your order.'; }
+        }
       }
     } catch (e) { console.error('Payment callback verification failed:', e.message); }
   }
@@ -598,8 +630,6 @@ app.get('/payment/done', h(async (req, res) => {
   const button = ok ? `<p><a href="${target}" style="display:inline-block;padding:13px 20px;background:#6D28D9;color:white;text-decoration:none;border-radius:8px">Back to Cönëct</a></p>` : '';
   res.status(200).type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">${refresh}<title>${heading}</title><body style="font-family:system-ui;text-align:center;padding:48px 24px"><h2>${heading}</h2><p>${message}</p>${button}</body>`);
 }));
-
-const PAYSTACK = 'https://api.paystack.co';
 
 async function requestOrderRefund(orderId, { ticketId = null } = {}) {
   // Claim the refund while holding the order row lock. All cancellation and support
@@ -616,11 +646,12 @@ async function requestOrderRefund(orderId, { ticketId = null } = {}) {
     await client.query("UPDATE orders SET refund_status='processing',refund_updated_at=now() WHERE id=$1", [order.id]);
     await client.query("UPDATE support_tickets SET refund_status='processing',updated_at=now() WHERE order_id=$1 AND customer_id=$2 AND refund_status NOT IN ('completed','rejected')", [order.id, order.customer_id]);
     await reverseOrderEarnings(client, order.id); // no-op unless the order was already delivered and paid out to wallets
-    return { kind: 'claimed', orderId: order.id, customerId: order.customer_id, paymentRef: order.payment_ref };
+    const att = (await client.query('SELECT gateway,amount_kobo FROM payment_attempts WHERE reference=$1', [order.payment_ref])).rows[0];
+    return { kind: 'claimed', orderId: order.id, customerId: order.customer_id, paymentRef: order.payment_ref, gateway: att?.gateway || 'paystack', amountKobo: att ? Number(att.amount_kobo) : null };
   });
   if (claim.kind !== 'claimed') return claim;
   try {
-    await paystack('POST', '/refund', { transaction: claim.paymentRef });
+    await gateways[claim.gateway].refund(claim.paymentRef, { amountKobo: claim.amountKobo });
     const result = await tx(async (client) => {
       const order = (await client.query("UPDATE orders SET refund_status='requested',refund_updated_at=now() WHERE id=$1 AND refund_status='processing' RETURNING id,refund_status,refund_updated_at", [claim.orderId])).rows[0];
       await client.query("UPDATE support_tickets SET refund_status='requested',updated_at=now() WHERE order_id=$1 AND customer_id=$2 AND refund_status='processing'", [claim.orderId, claim.customerId]);
@@ -635,26 +666,18 @@ async function requestOrderRefund(orderId, { ticketId = null } = {}) {
   }
 }
 
-async function paystack(method, path, body) {
-  const r = await fetch(PAYSTACK + path, {
-    method,
-    headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.status === false) throw httpError(502, j.message || 'The payment provider returned an error');
-  return j.data;
-}
 
 // Never trust the client or webhook payload for payment details. Verify with Paystack,
 // match the reference to a server-created attempt, then lock the order before applying payment.
 async function confirmPayment(reference) {
   if (typeof reference !== 'string' || reference.length < 1 || reference.length > 200) return null;
-  const d = await paystack('GET', `/transaction/verify/${encodeURIComponent(reference)}`);
-  if (d.status !== 'success' || d.reference !== reference || d.currency !== 'NGN') return null;
-  const attempt = (await q('SELECT reference,order_id,amount_kobo,status FROM payment_attempts WHERE reference=$1', [reference])).rows[0];
-  const orderId = d.metadata && d.metadata.order_id;
-  if (!attempt || !orderId || String(attempt.order_id) !== String(orderId) || Number(d.amount) !== Number(attempt.amount_kobo)) return null;
+  const attempt = (await q('SELECT reference,order_id,amount_kobo,status,gateway FROM payment_attempts WHERE reference=$1', [reference])).rows[0];
+  const gw = attempt && gateways[attempt.gateway];
+  if (!gw) return null;
+  const d = await gw.verify(reference);
+  if (d.state !== 'paid' || d.reference !== reference || d.currency !== 'NGN') return null;
+  if (gw.matchesOrderId && (!d.orderId || String(attempt.order_id) !== String(d.orderId))) return null;
+  if (Number(d.amountKobo) !== Number(attempt.amount_kobo)) return null;
 
   const outcome = await tx(async (c) => {
     const a = (await c.query('SELECT * FROM payment_attempts WHERE reference=$1 FOR UPDATE', [reference])).rows[0];
@@ -680,7 +703,7 @@ async function confirmPayment(reference) {
 
   if (outcome.kind === 'refund') {
     try {
-      await paystack('POST', '/refund', { transaction: reference });
+      await gw.refund(reference, { amountKobo: Number(attempt.amount_kobo) });
       await q(`UPDATE payment_attempts SET status='refund_requested',updated_at=now() WHERE reference=$1`, [reference]);
     } catch (e) {
       // The provider may have accepted the refund before the connection failed.
@@ -696,6 +719,20 @@ async function confirmPayment(reference) {
   }
   return outcome.kind === 'already_paid' ? outcome.order : null;
 }
+app.post('/webhooks/opay', h(async (req, res) => {
+  const event = req.body;
+  const reference = event && event.payload && event.payload.reference;
+  if (!event || event.type !== 'transaction-status' || typeof reference !== 'string' || reference.length > 200) return res.sendStatus(200);
+  const known = (await q(`SELECT 1 FROM payment_attempts WHERE reference=$1 AND gateway='opay'`, [reference])).rows[0];
+  if (!known) return res.sendStatus(200);
+  try {
+    await confirmPayment(reference);
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error('OPay webhook processing failed:', e.message);
+    return res.status(500).json({ error: 'Webhook processing failed; retry later.' });
+  }
+}));
 
 async function paystackWebhook(req, res) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
