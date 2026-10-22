@@ -84,9 +84,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Opens Paystack's secure checkout page in the browser.
-  Future<void> startPayment(String orderId) async {
-    final r = await api.post('/orders/$orderId/pay');
+    /// Payment gateways the admin has switched on (and that are set up on the server).
+  Future<List<Map<String, dynamic>>> paymentGateways() async {
+    final r = await api.get('/payment-gateways');
+    return [for (final g in (r as List)) Map<String, dynamic>.from(g as Map)];
+  }
+
+  /// Opens the chosen gateway's secure checkout page in the browser.
+  Future<void> startPayment(String orderId, {String? gateway}) async {
+    final r = await api.post('/orders/$orderId/pay', gateway == null ? null : {'gateway': gateway});
     final ok = await launchUrl(Uri.parse(r['url']), mode: LaunchMode.externalApplication, webOnlyWindowName: '_self');
     if (!ok) throw ApiException('Could not open the payment page');
   }
