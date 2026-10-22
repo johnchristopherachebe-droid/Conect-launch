@@ -1,4 +1,4 @@
-// Public Terms and Privacy pages: https://<your-api-domain>/terms and /privacy
+// Public Terms, Privacy and Refund pages: https://<your-api-domain>/terms, /privacy and /refund-policy
 //
 // BEFORE LAUNCH: edit the three values below, then have a Nigerian lawyer review both pages.
 // Anything in [square brackets] is a decision only you can make.
@@ -21,6 +21,7 @@ li{margin:4px 0}a{color:#7C3AED}
 </style></head><body>
 <header><h1>${title}</h1><p>${COMPANY} · Last updated ${UPDATED}</p></header>
 <main>${body}
+<p style="text-align:center;font-size:14px"><a href="/terms">Terms &amp; Conditions</a> · <a href="/privacy">Privacy Policy</a> · <a href="/refund-policy">Refund &amp; Cancellation Policy</a></p>
 <p style="text-align:center;color:#6B6280;font-size:13px">Questions? Contact us at ${CONTACT_EMAIL}.</p></main></body></html>`;
 
 const terms = `
@@ -112,6 +113,29 @@ const privacy = `
 <section><h2>9. Changes</h2>
 <p>We may update this policy and will change the date above. For major changes, we will tell you in the app or by email.</p></section>`;
 
+const refund = `
+<section><h2>1. Cancelling an order</h2>
+<ul><li>You can cancel an order while it is still waiting to be accepted by the vendor. The full amount is then refunded.</li>
+<li>Once a vendor has accepted and started preparing your order, it can no longer be cancelled.</li>
+<li>A vendor or rider may cancel an order if an item is unavailable or delivery is not possible. If that happens, you are refunded in full.</li></ul></section>
+
+<section><h2>2. When you can get a refund</h2>
+<ul><li>Your order was not delivered.</li>
+<li>Items are missing or incorrect.</li>
+<li>Your payment was taken but the order was not created.</li></ul>
+<p>Refunds are not available for change of mind after the vendor has started preparing your order, or where the delivery PIN was given to the rider before you received the order.</p></section>
+
+<section><h2>3. How to request a refund</h2>
+<p>Contact support from the app, or email ${CONTACT_EMAIL}, within <b>24 hours</b> of the order. Include your order details and a short description of the problem. We may ask the vendor and rider for their side, so each request is reviewed before it is approved.</p></section>
+
+<section><h2>4. How and when you are refunded</h2>
+<ul><li>Approved refunds go back to your original payment method through <b>Paystack</b>. We do not refund to a different card or account.</li>
+<li>Once approved, refunds can take several business days to appear, depending on your bank.</li>
+<li>Delivery fees are refunded if the order was not delivered. If the order was delivered with a problem, we will tell you what is refunded when we review it.</li></ul></section>
+
+<section><h2>5. Contact</h2>
+<p>Questions about a refund? Contact us at ${CONTACT_EMAIL}.</p></section>`;
+
 export function registerLegal(app) {
   const send = (title, body) => (req, res) => {
     res.set('Cache-Control', 'public, max-age=300');
@@ -119,4 +143,5 @@ export function registerLegal(app) {
   };
   app.get('/terms', send('Terms & Conditions', terms));
   app.get('/privacy', send('Privacy Policy', privacy));
+  app.get('/refund-policy', send('Refund & Cancellation Policy', refund));
 }
