@@ -102,7 +102,7 @@ function loginView() {
 }
 
 function shell() {
-  const tabs = currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','payouts','transactions','settings','support'];
+  const tabs = currentRole === 'support' ? ['support'] : ['orders','stores','couriers','vendors','documents','zones','payouts','transactions','gateways','settings','support'];
   $('#root').innerHTML = `<div class="top"><div class="top-in"><div class="brandrow">${LOGO}${WORD}<span class="tag">${currentRole === 'support' ? 'SUPPORT' : 'ADMIN'}</span></div><button id="out" class="ghost">Sign out</button></div>
   <nav class="tabs">${tabs.map((t) => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</nav></div>
   <main><p class="err" id="e"></p><div id="view"></div></main>`;
@@ -123,6 +123,7 @@ async function show() {
     else if (tab === 'zones' && currentRole === 'admin') await zonesView();
     else if (tab === 'payouts' && currentRole === 'admin') await payoutsView();
     else if (tab === 'transactions' && currentRole === 'admin') await transactionsView();
+    else if (tab === 'gateways' && currentRole === 'admin') await gatewaysView();
     else if (tab === 'settings' && currentRole === 'admin') await settingsView();
     else await supportView();
   } catch (x) { if ($('#e')) $('#e').textContent = x.message; }
@@ -309,6 +310,16 @@ async function payoutsView() {
     await api('PATCH', '/admin/settings/wallet', { courier_share_percent: Number($('#wshare').value), min_withdrawal: Number($('#wmin').value) });
     alert('Wallet rules saved.');
   });
+}
+async function gatewaysView() {
+  const rows = await api('GET', '/admin/gateways');
+  $('#view').innerHTML = `<h2>Payment gateways</h2>
+  <p class="mute">Customers choose from the gateways switched on here. A gateway can only be switched on once its keys are set on the server, and at least one must stay on. Switching one off does not affect orders already paid through it, and refunds still go back through the gateway that took the payment. If only one is on, customers go straight to it without a choice.</p>
+  <div class="scroll"><table><thead><tr><th>Gateway</th><th>Keys on the server</th><th>Shown to customers</th></tr></thead><tbody>${rows.map((g) => `<tr>
+    <td><b>${esc(g.name)}</b><br><span class="mute">${esc(g.description)}</span></td>
+    <td>${g.configured ? 'Ready' : '<span class="mute">Missing. Add the keys on the server first.</span>'}</td>
+    <td><label><input type="checkbox" data-gw="${esc(g.code)}" ${g.enabled ? 'checked' : ''} ${!g.configured && !g.enabled ? 'disabled' : ''}> ${g.enabled ? 'On' : 'Off'}</label></td></tr>`).join('')}</tbody></table></div>`;
+  document.querySelectorAll('[data-gw]').forEach((el) => { el.onchange = () => run(async () => { await api('PATCH', '/admin/gateways/' + encodeURIComponent(el.dataset.gw), { enabled: el.checked }); }); });
 }
 
 async function settingsView() {
