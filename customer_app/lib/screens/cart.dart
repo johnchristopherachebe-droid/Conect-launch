@@ -5,6 +5,7 @@ import '../api.dart';
 import '../state.dart';
 import 'tracking.dart';
 import 'delivery_contact.dart';
+import 'gateway_picker.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -95,8 +96,13 @@ class _CartScreenState extends State<CartScreen> {
       if (noteCtl.text.trim().isNotEmpty) {
         try { await client.post('/orders/${o['id']}/delivery-note', {'note': noteCtl.text.trim()}); } catch (_) {}
       }
-      try {
-        await context.read<AppState>().startPayment(o['id']);
+            try {
+        final gateway = await pickGateway(context);
+        if (gateway == null) {
+          toast('Order saved. Tap Pay now on the next screen to finish paying.');
+        } else if (mounted) {
+          await context.read<AppState>().startPayment(o['id'], gateway: gateway);
+        }
       } catch (_) {
         toast('Order saved. Tap Pay now on the next screen to finish paying.');
       }
