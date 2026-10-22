@@ -7,6 +7,7 @@ import '../brand.dart';
 import '../state.dart';
 import 'live_map.dart';
 import 'delivery_pin_card.dart';
+import 'gateway_picker.dart';
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -292,8 +293,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () async {
-                try {
-                  await context.read<AppState>().startPayment(widget.orderId);
+               try {
+                  final gateway = await pickGateway(context);
+                  if (gateway == null || !mounted) return;
+                  await context.read<AppState>().startPayment(widget.orderId, gateway: gateway);
                 } catch (e) {
                   if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
                 }
