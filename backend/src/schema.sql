@@ -334,3 +334,13 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS categories TEXT[];
 UPDATE stores SET categories = ARRAY[category] WHERE categories IS NULL;
 ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS business_types TEXT[];
 UPDATE vendor_profiles SET business_types = ARRAY[business_type] WHERE business_types IS NULL;
+-- Payment gateways (Paystack, OPay, ...). Admins switch them on/off in the panel; customers only see the ones that are on.
+CREATE TABLE IF NOT EXISTS payment_gateways (
+  code TEXT PRIMARY KEY CHECK (code ~ '^[a-z][a-z0-9_]{1,30}$'),
+  enabled BOOLEAN NOT NULL DEFAULT false,
+  sort_order INT NOT NULL DEFAULT 100,
+  updated_by UUID,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO payment_gateways(code, enabled, sort_order) VALUES ('paystack', true, 10), ('opay', false, 20) ON CONFLICT (code) DO NOTHING;
+ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS gateway TEXT NOT NULL DEFAULT 'paystack';
