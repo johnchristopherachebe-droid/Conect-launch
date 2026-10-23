@@ -111,7 +111,68 @@ const opay = {
   },
 };
 
-export const gateways = { paystack, opay };
+// ---------------- Korapay
+const KORAPAY = 'https://api.korapay.com/merchant/api/v1';
+
+async function korapayCall(method, path, body) {
+  const r = await fetch(KORAPAY + path, {
+    method,
+    headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.status === false) throw httpError(502, j.message || 'The payment provider returned an error');
+  return j.data;
+}
+
+const korapay = {
+  code: 'korapay',
+  name: 'Korapay',
+  description: 'Card, bank transfer or pay with bank',
+  matchesOrderId: false,
+  configured: () => Boolean(process.env.KORAPAY_SECRET_KEY),
+
+  async initialize({ order, reference, amountKobo, email, publicUrl }) {
+    const d = await korapayCall('POST', '/charges/initialize', {
+      reference,
+      amount: amountKobo / 100,
+      currency: 'NGN',
+      narration: 'Conect order',
+      redirect_url: `${publicUrl}/payment/done`,
+      notification_url: `${publicUrl}/webhooks/korapay`,
+      customer: { email },
+    });
+    if (!d || d.reference !== reference || !d.checkout_url) throw httpError(502, 'The payment provider returned an invalid checkout response. Please try again.');
+    return { url: d.checkout_url, reference: d.reference };
+  },
+
+  async verify(reference) {
+    const d = await korapayCall('GET', `/charges/${encodeURIComponent(reference)}`);
+    const state = d.status === 'success' ? 'paid' : ['failed', 'expired'].includes(d.status) ? 'failed' : 'pending';
+    const paid = d.amount_paid ?? d.amount;
+    return {
+      state,
+      reference: [d.reference, d.payment_reference].includes(reference) ? reference : d.reference,
+      currency: d.currency || 'NGN',
+      amountKobo: Math.round(Number(paid) * 100),
+      orderId: null,
+    };
+  },
+
+  async refund(paymentRef, { amountKobo }) {
+    const reference = 'rf' + crypto.createHash('sha256').update(paymentRef).digest('hex').slice(0, 30);
+    const d = await korapayCall('POST', '/refunds/initiate', {
+      payment_reference: paymentRef,
+      reference,
+      amount: amountKobo / 100,
+      reason: 'Order refund',
+    });
+    if (d && d.status === 'failed') throw httpError(502, 'Korapay did not accept the refund');
+    return d;
+  },
+};
+
+export const gateways = { paystack, opay, korapay };
 export const gatewayCodes = Object.keys(gateways);
 export const isConfigured = (code) => Boolean(gateways[code] && gateways[code].configured());
 export const publicInfo = (code) => ({ code, name: gateways[code].name, description: gateways[code].description });
