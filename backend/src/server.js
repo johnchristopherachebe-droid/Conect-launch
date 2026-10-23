@@ -571,7 +571,7 @@ app.post('/orders/:id/pay', payLimiter, requireAuth('customer'), h(async (req, r
   if (o.status === 'cancelled') return res.status(409).json({ error: 'This order was cancelled' });
   const amountKobo = Math.round(Number(o.total) * 100);
   if (!Number.isSafeInteger(amountKobo) || amountKobo < 1) return res.status(409).json({ error: 'This order has an invalid payment amount. Contact support.' });
-  const reference = `cnct-${o.id}-${crypto.randomUUID()}`;
+  const reference = `cnct-${crypto.randomUUID()}`;
   await q(`INSERT INTO payment_attempts(reference,order_id,amount_kobo,status,gateway) VALUES($1,$2,$3,'initializing',$4)`, [reference,o.id,amountKobo,code]);
   try {
     const d = await gateways[code].initialize({
@@ -719,6 +719,21 @@ async function confirmPayment(reference) {
   }
   return outcome.kind === 'already_paid' ? outcome.order : null;
 }
+app.post('/webhooks/korapay', h(async (req, res) => {
+  const event = req.body;
+  const reference = event && event.data && event.data.reference;
+  if (!event || event.event !== 'charge.success' || typeof reference !== 'string' || reference.length > 200) return res.sendStatus(200);
+  const known = (await q(`SELECT 1 FROM payment_attempts WHERE reference=$1 AND gateway='korapay'`, [reference])).rows[0];
+  if (!known) return res.sendStatus(200);
+  try {
+    await confirmPayment(reference);
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error('Korapay webhook processing failed:', e.message);
+    return res.status(500).json({ error: 'Webhook processing failed; retry later.' });
+  }
+}));
+
 app.post('/webhooks/opay', h(async (req, res) => {
   const event = req.body;
   const reference = event && event.payload && event.payload.reference;
