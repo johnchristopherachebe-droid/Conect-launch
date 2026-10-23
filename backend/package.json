@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "migrate": "node src/migrate.js",
     "make-admin": "node src/make-admin.js",
+    "make-demo": "node src/make-demo.js",
     "test": "node --test --test-concurrency=1 test/api.test.js"
   },
   "dependencies": {
