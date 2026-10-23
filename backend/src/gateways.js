@@ -120,13 +120,16 @@ async function korapayCall(method, path, body) {
     headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
-    const j = await r.json().catch(() => ({}));
+  const text = await r.text();
+  let j = {};
+  try { j = JSON.parse(text); } catch { /* not JSON */ }
   if (!r.ok || j.status === false) {
-    console.error('Korapay error', r.status, method, path, JSON.stringify(j).slice(0, 500));
+    console.error('Korapay error', r.status, method, path, 'server:', r.headers.get('server'), text.slice(0, 500));
     throw httpError(502, j.message || `The payment provider returned an error (HTTP ${r.status})`);
   }
   return j.data;
 }
+
 
 const korapay = {
   code: 'korapay',
