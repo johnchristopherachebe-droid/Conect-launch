@@ -117,14 +117,14 @@ const KORAPAY = 'https://api.korapay.com/merchant/api/v1';
 async function korapayCall(method, path, body) {
   const r = await fetch(KORAPAY + path, {
     method,
-    headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json', 'User-Agent': 'Conect-Backend/1.0 (+https://api.cnnet.online)' },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await r.text();
   let j = {};
   try { j = JSON.parse(text); } catch { /* not JSON */ }
   if (!r.ok || j.status === false) {
-    console.error('Korapay error', r.status, method, path, 'server:', r.headers.get('server'), text.slice(0, 500));
+    console.error('Korapay error', r.status, method, path, 'server:', r.headers.get('server'),text.replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
     throw httpError(502, j.message || `The payment provider returned an error (HTTP ${r.status})`);
   }
   return j.data;
