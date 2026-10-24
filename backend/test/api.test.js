@@ -199,26 +199,42 @@ describe('Cönëct API', { skip: url ? false : 'set TEST_DATABASE_URL to run the
     const list=await call('GET','/admin/documents',null,admin.token); assert.equal(list.status,200); assert.ok(list.body.length>=3);
     const fileResponse=await realFetch(`${base}/admin/documents/${idDoc.body.id}/file`,{headers:{Authorization:`Bearer ${admin.token}`}});
     assert.equal(fileResponse.status,200); assert.match(await fileResponse.text(),/^%PDF-1\.4/);
-  });
+    });
 
-  it('requires real reviewed documents before vendor approval', async () => {
+  it('lets an approved vendor sell as unverified, then verifies them once ID, food safety and orientation are done', async () => {
     const vendor=await register('vendor');
     await call('PUT','/vendor/profile',{business_name:'Test Bakery',business_type:'food',phone:'+2348012345678',address:'2 Test Road, Awka',registration_number:'TEST-1'},vendor.token);
     const pdf=Buffer.from('%PDF-1.4\nVendor test document\n','utf8').toString('base64');
     const upload=async(type)=>call('POST','/verification/documents',{document_type:type,filename:`${type}.pdf`,mime_type:'application/pdf',data_base64:pdf},vendor.token);
     const idDoc=await upload('government_id'), foodDoc=await upload('food_safety'); assert.equal(idDoc.status,201); assert.equal(foodDoc.status,201);
-    const admin=await register(); await pool.query("UPDATE users SET role='admin' WHERE email=$1",[admin.email]);
+        const admin=await register(); await pool.query("UPDATE users SET role='admin' WHERE email=$1",[admin.email]);
     const userId=(await pool.query('SELECT id FROM users WHERE email=$1',[vendor.email])).rows[0].id;
-    assert.equal((await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:true,orientation_completed:true},admin.token)).status,409);
+    // Approval needs the store (step 2), not the documents or orientation.
+    assert.equal((await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:true},admin.token)).status,409);
+    assert.equal((await call('POST','/vendor/store',{lat:6.2,lng:7.07},vendor.token)).status,201);
+    const approved=await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:true},admin.token);
+    assert.equal(approved.status,200); assert.equal(approved.body.verified,false);
+    const mine=await call('GET','/vendor/profile',null,vendor.token);
+    assert.equal(mine.body.approved,true); assert.equal(mine.body.verified,false);
+    assert.equal((await pool.query('SELECT is_verified FROM stores WHERE vendor_id=$1',[userId])).rows[0].is_verified,false);
+    // Documents alone are not enough: orientation is still pending.
     for(const d of [idDoc.body,foodDoc.body]) assert.equal((await call('PATCH',`/admin/documents/${d.id}`,{review_status:'approved'},admin.token)).status,200);
-    assert.equal((await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:true,orientation_completed:true,orientation_notes:'In-person orientation completed'},admin.token)).status,200);
+    assert.equal((await pool.query('SELECT is_verified FROM stores WHERE vendor_id=$1',[userId])).rows[0].is_verified,false);
+    const done=await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:true,orientation_completed:true,orientation_notes:'In-person orientation completed'},admin.token);
+    assert.equal(done.status,200); assert.equal(done.body.verified,true);
+    assert.equal((await pool.query('SELECT is_verified FROM stores WHERE vendor_id=$1',[userId])).rows[0].is_verified,true);
     const persisted=(await pool.query('SELECT orientation_completed,orientation_completed_at,orientation_completed_by,orientation_notes FROM vendor_profiles WHERE user_id=$1',[userId])).rows[0];
     assert.equal(persisted.orientation_completed,true,'approval must persist the orientation record');
     assert.ok(persisted.orientation_completed_at,'approval must record when orientation was completed');
-    assert.ok(persisted.orientation_completed_by,'approval must record which admin completed orientation');
+        assert.ok(persisted.orientation_completed_by,'approval must record which admin completed orientation');
     assert.equal(persisted.orientation_notes,'In-person orientation completed');
+    // Rejecting a document removes the badge but not the ability to sell.
+    assert.equal((await call('PATCH',`/admin/documents/${idDoc.body.id}`,{review_status:'rejected'},admin.token)).status,200);
+    assert.equal((await pool.query('SELECT is_verified FROM stores WHERE vendor_id=$1',[userId])).rows[0].is_verified,false);
+    assert.equal((await pool.query('SELECT vendor_approved FROM users WHERE id=$1',[userId])).rows[0].vendor_approved,true);
     assert.equal((await call('PATCH',`/admin/vendors/${userId}/approval`,{approved:false,review_notes:'Temporarily suspended'},admin.token)).status,200);
     assert.equal((await pool.query('SELECT vendor_approved FROM users WHERE id=$1',[userId])).rows[0].vendor_approved,false);
+    assert.equal((await pool.query('SELECT is_verified FROM stores WHERE vendor_id=$1',[userId])).rows[0].is_verified,false);
   });
 
   it('checks current database roles and invalidates deactivated accounts', async () => {
