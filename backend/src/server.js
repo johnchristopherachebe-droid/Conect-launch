@@ -185,12 +185,33 @@ const approvedVendor = (req, res, next) => {
     }).catch(next);
 };
 
+// Selling and the verification badge are two separate things. A vendor can sell once an admin approves their
+// store (users.vendor_approved). The store only shows the badge (stores.is_verified) when, on top of that,
+// the government ID, the food-safety approval (food businesses only) and the orientation are all complete.
+async function refreshVendorVerified(client, userId) {
+  const row = (await client.query(
+    `SELECT u.vendor_approved,v.business_type,v.business_types,v.government_id_status,v.food_safety_status,v.orientation_completed
+     FROM users u JOIN vendor_profiles v ON v.user_id=u.id WHERE u.id=$1 AND u.role='vendor'`, [userId])).rows[0];
+  let verified = false;
+  if (row) {
+    const docs = (await client.query(`SELECT DISTINCT ON(document_type) document_type,review_status FROM verification_documents WHERE user_id=$1 AND document_type IN ('government_id','food_safety') ORDER BY document_type,created_at DESC,id DESC`, [userId])).rows;
+    const latest = Object.fromEntries(docs.map(d => [d.document_type, d.review_status]));
+    const food = (row.business_types ?? [row.business_type]).includes('food');
+    verified = Boolean(row.vendor_approved && row.orientation_completed
+      && row.government_id_status === 'approved' && latest.government_id === 'approved'
+      && (!food || (row.food_safety_status === 'approved' && latest.food_safety === 'approved')));
+  }
+  await client.query('UPDATE stores SET is_verified=$2 WHERE vendor_id=$1', [userId, verified]);
+  return verified;
+}
+
 app.get('/vendor/profile', requireAuth('vendor'), h(async (req, res) => {
   const profile = (await q('SELECT * FROM vendor_profiles WHERE user_id = $1', [req.user.id])).rows[0] ?? null;
   const store = (await q('SELECT * FROM stores WHERE vendor_id = $1', [req.user.id])).rows[0] ?? null;
   const status = (await q('SELECT vendor_approved FROM users WHERE id = $1', [req.user.id])).rows[0];
-  res.json({ profile, store, approved: Boolean(status?.vendor_approved) });
+  res.json({ profile, store, approved: Boolean(status?.vendor_approved), verified: Boolean(store?.is_verified) });
 }));
+
 
 const BUSINESS_TYPES = ['food','groceries','pharmacy','fashion','gadgets','beauty'];
 
@@ -208,8 +229,10 @@ app.put('/vendor/profile', requireAuth('vendor'), h(async (req, res) => {
     `INSERT INTO vendor_profiles (user_id,business_name,business_type,business_types,phone,address,registration_number)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (user_id) DO UPDATE SET business_name=$2,business_type=$3,business_types=$4,phone=$5,address=$6,registration_number=$7,updated_at=now()
-     RETURNING *`, [req.user.id,b.business_name,types[0],types,b.phone ?? null,b.address,b.registration_number ?? null]);
+          RETURNING *`, [req.user.id,b.business_name,types[0],types,b.phone ?? null,b.address,b.registration_number ?? null]);
   await q('UPDATE stores SET category=$2,categories=$3 WHERE vendor_id=$1', [req.user.id,types[0],types]);
+  // Changing categories changes what verification needs (food safety only applies to food), so re-check the badge.
+  await refreshVendorVerified({ query:(t,p)=>q(t,p) }, req.user.id);
   res.status(200).json(rows[0]);
 }));
 
@@ -248,6 +271,7 @@ app.post('/verification/documents', requireAuth('vendor','courier'), limiter(15*
   const enc=encryptDocument(bytes);
   const {rows}=await q(`INSERT INTO verification_documents(user_id,document_type,filename,mime_type,encrypted_data,encryption_iv,encryption_tag) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,document_type,filename,mime_type,review_status,created_at`,[req.user.id,b.document_type,b.filename,b.mime_type,enc.encrypted,enc.iv,enc.tag]);
   if(req.user.role==='vendor' && ['government_id','food_safety'].includes(b.document_type)) await q(`UPDATE vendor_profiles SET ${b.document_type==='government_id'?'government_id_status':'food_safety_status'}='submitted',updated_at=now() WHERE user_id=$1`,[req.user.id]);
+  if(req.user.role==='vendor' && ['government_id','food_safety'].includes(b.document_type)) await refreshVendorVerified({ query:(t,p)=>q(t,p) }, req.user.id);
   if(req.user.role==='courier') { const field=b.document_type==='government_id'?'government_id_status':b.document_type==='driving_license'?'driving_license_status':'vehicle_registration_status'; await q(`UPDATE courier_profiles SET ${field}='submitted',updated_at=now() WHERE user_id=$1`,[req.user.id]); }
   res.status(201).json(rows[0]);
 }));
@@ -1059,8 +1083,9 @@ app.patch('/admin/documents/:id', adminOnly, h(async(req,res)=>{
       await client.query(`UPDATE vendor_profiles SET government_id_status=$2,updated_at=now() WHERE user_id=$1`,[row.user_id,status]);
       await client.query(`UPDATE courier_profiles SET government_id_status=$2,updated_at=now() WHERE user_id=$1`,[row.user_id,status]);
     } else if(row.document_type==='food_safety') await client.query('UPDATE vendor_profiles SET food_safety_status=$2,updated_at=now() WHERE user_id=$1',[row.user_id,status]);
-    else if(row.document_type==='driving_license') await client.query('UPDATE courier_profiles SET driving_license_status=$2,updated_at=now() WHERE user_id=$1',[row.user_id,status]);
+        else if(row.document_type==='driving_license') await client.query('UPDATE courier_profiles SET driving_license_status=$2,updated_at=now() WHERE user_id=$1',[row.user_id,status]);
     else if(row.document_type==='vehicle_registration') await client.query('UPDATE courier_profiles SET vehicle_registration_status=$2,updated_at=now() WHERE user_id=$1',[row.user_id,status]);
+    if(['government_id','food_safety'].includes(row.document_type)) await refreshVendorVerified(client,row.user_id);
     return row;
   });
   if(!doc)return res.status(404).json({error:'Document not found.'});
@@ -1099,9 +1124,9 @@ app.patch('/admin/couriers/:id/approval', adminOnly, h(async (req, res) => {
 // ---------- Admin vendor review ----------
 app.get('/admin/vendors', adminOnly, h(async (_req, res) => {
   res.json((await q(
-    `SELECT u.id,u.name,u.email,u.phone,u.vendor_approved,v.business_name,v.business_type,v.address,
+    `SELECT u.id,u.name,u.email,u.phone,u.vendor_approved,v.business_name,v.business_type,v.business_types,v.address,
             v.registration_number,v.government_id_status,v.food_safety_status,v.orientation_completed,v.review_notes,
-            s.id AS store_id,s.is_open
+            s.id AS store_id,s.is_open,s.is_verified AS verified
      FROM users u LEFT JOIN vendor_profiles v ON v.user_id=u.id LEFT JOIN stores s ON s.vendor_id=u.id
      WHERE u.role='vendor' ORDER BY u.created_at DESC`)).rows);
 }));
@@ -1111,18 +1136,16 @@ app.patch('/admin/vendors/:id/approval', adminOnly, h(async (req, res) => {
   const user = await tx(async client => {
     // Lock the vendor record so concurrent admin actions cannot approve based on stale review state.
     const existing=(await client.query("SELECT id FROM users WHERE id=$1 AND role='vendor' FOR UPDATE",[req.params.id])).rows[0];
-    if(!existing) return {notFound:true};
+        if(!existing) return {notFound:true};
     const check = (await client.query('SELECT v.business_name,v.business_type,v.business_types,v.government_id_status,v.food_safety_status,v.orientation_completed FROM vendor_profiles v WHERE v.user_id=$1',[req.params.id])).rows[0];
-    const orientation = b.orientation_completed ?? check?.orientation_completed;
     if (b.approved) {
-      const docs=(await client.query(`SELECT DISTINCT ON(document_type) document_type,review_status FROM verification_documents WHERE user_id=$1 AND document_type IN ('government_id','food_safety') ORDER BY document_type,created_at DESC,id DESC`,[req.params.id])).rows;
-      const latest=Object.fromEntries(docs.map(d=>[d.document_type,d.review_status]));
+      // Approval only lets the vendor start selling. ID, food-safety and orientation earn the verification badge later.
       if (!check) throw httpError(409, 'Vendor must submit a business profile before approval.');
-      if (!orientation || check.government_id_status !== 'approved' || latest.government_id !== 'approved' || ((check.business_types ?? [check.business_type]).includes('food') && (check.food_safety_status !== 'approved' || latest.food_safety !== 'approved')))
-        throw httpError(409, 'Approval requires verified government ID, applicable food-safety approval, and completed orientation. Save those review results first.');
+      const hasStore=(await client.query('SELECT 1 FROM stores WHERE vendor_id=$1',[req.params.id])).rows[0];
+      if (!hasStore) throw httpError(409, 'Vendor must create their store (step 2) before approval.');
     }
     // Persist orientation/review notes before setting the privilege flag, in the same transaction.
-    const updates = { review_notes:b.review_notes, orientation_completed:b.orientation_completed, orientation_notes:b.orientation_notes };
+   const updates = { review_notes:b.review_notes, orientation_completed:b.orientation_completed, orientation_notes:b.orientation_notes };
     if(b.orientation_completed===true) { updates.orientation_completed_at=new Date(); updates.orientation_completed_by=req.user.id; }
     if(b.orientation_completed===false) { updates.orientation_completed_at=null; updates.orientation_completed_by=null; }
     const keys = Object.keys(updates).filter(k => updates[k] !== undefined);
@@ -1130,9 +1153,10 @@ app.patch('/admin/vendors/:id/approval', adminOnly, h(async (req, res) => {
       const sets = keys.map((k,i)=>`${k}=$${i+2}`).join(', ');
       await client.query(`UPDATE vendor_profiles SET ${sets},updated_at=now() WHERE user_id=$1`,[req.params.id,...keys.map(k=>updates[k])]);
     }
-    const result=(await client.query("UPDATE users SET vendor_approved=$2 WHERE id=$1 AND role='vendor' RETURNING id,name,email,vendor_approved",[req.params.id,b.approved])).rows[0];
+        const result=(await client.query("UPDATE users SET vendor_approved=$2 WHERE id=$1 AND role='vendor' RETURNING id,name,email,vendor_approved",[req.params.id,b.approved])).rows[0];
     if(!b.approved) await client.query('UPDATE stores SET is_open=false WHERE vendor_id=$1',[req.params.id]);
-    return result;
+    const verified=await refreshVendorVerified(client,req.params.id);
+    return { ...result, verified };
   });
   if(user?.notFound) return res.status(404).json({error:'Vendor not found.'});
   res.json(user);
