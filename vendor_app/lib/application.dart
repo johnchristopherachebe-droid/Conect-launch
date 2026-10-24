@@ -25,6 +25,8 @@ class VendorApplication extends StatefulWidget {
   final Map<String, dynamic> data;
   final List documents;
   final VoidCallback onChanged, onSignOut;
+  final bool approved; // an approved vendor can already sell; steps 3 and 4 only earn the verification badge
+  final VoidCallback? onBack;
   const VendorApplication({
     super.key,
     required this.api,
@@ -32,6 +34,8 @@ class VendorApplication extends StatefulWidget {
     required this.documents,
     required this.onChanged,
     required this.onSignOut,
+    this.approved = false,
+    this.onBack,
   });
   @override
   State<VendorApplication> createState() => _VendorApplicationState();
@@ -79,9 +83,15 @@ class _VendorApplicationState extends State<VendorApplication> {
     if (bizTypes.isEmpty) bizTypes = ['food'];
   }
 
-  void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  bool get _isFood => bizTypes.contains('food');
+  // Food safety approval only applies to food businesses. Use the saved categories so unsaved ticks in the form don't change the steps.
+  bool get _isFood {
+    final p = profile;
+    if (p == null) return bizTypes.contains('food');
+    final t = p['business_types'] is List ? p['business_types'] as List : [p['business_type']];
+    return t.contains('food');
+  }
   String _docState(String type) {
     final p = profile;
     if (p == null) return 'not_submitted';
@@ -145,9 +155,9 @@ class _VendorApplicationState extends State<VendorApplication> {
 
   Future<void> _createStore() async {
     if (lat == null || lng == null) return _toast('Capture your store location first.');
-    await _run(() async {
+        await _run(() async {
       await widget.api.send('POST', '/vendor/store', {'lat': lat, 'lng': lng, 'delivery_fee': 300});
-      _toast('Store created. It stays closed until you are approved.');
+      _toast('Store created. Our team will approve it so you can start selling.');
     });
   }
 
@@ -249,9 +259,10 @@ class _VendorApplicationState extends State<VendorApplication> {
     if (s != null) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('${s['name'] ?? 'Your store'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-        Text('GPS: ${s['lat']}, ${s['lng']}'),
+                Text('GPS: ${s['lat']}, ${s['lng']}'),
         const SizedBox(height: 4),
-        Text('Your store stays closed to customers until you are approved.', style: TextStyle(color: Theme.of(context).hintColor)),
+        Text(widget.approved ? 'Your store is approved. You can sell now.' : 'Waiting for our team to approve your store. You can finish steps 3 and 4 while you wait.',
+            style: TextStyle(color: Theme.of(context).hintColor)),
       ]);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -315,7 +326,7 @@ class _VendorApplicationState extends State<VendorApplication> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _chip(done ? 'Complete' : 'Pending', done ? const Color(0xFF16A34A) : conectOrange),
       const SizedBox(height: 8),
-      const Text('Every vendor completes a short orientation with our team in person before approval. '
+      const Text('Every vendor completes a short orientation with our team in person to get verified. '
           'Our team marks it complete after meeting you.'),
     ]);
   }
@@ -324,8 +335,21 @@ class _VendorApplicationState extends State<VendorApplication> {
   Widget build(BuildContext context) {
     final done = _done;
     final count = done.where((d) => d).length;
-    final note = (profile?['review_notes'] ?? '').toString().trim();
+        final note = (profile?['review_notes'] ?? '').toString().trim();
     final gov = _docStatus(_docState('government_id')).$1;
+    final verified = store?['is_verified'] == true;
+    final String message;
+    if (widget.approved) {
+      message = verified
+          ? 'You are verified. Customers see your verification badge.'
+          : count == 4
+              ? 'All steps are complete. Your verification badge will show as soon as our team confirms it.'
+              : 'You can sell now. Customers see “Not verified” on your store until steps 3 and 4 are complete.';
+    } else {
+      message = done[1]
+          ? 'Step 2 is done. Our team is approving your store so you can start selling. You can finish steps 3 and 4 while you wait.'
+          : 'Complete steps 1 and 2 and our team will approve your store so you can start selling. Then finish steps 3 and 4 to get your verification badge.';
+    }
     return GradientPage(
       title: 'Get verified',
       subtitle: '$count of 4 steps complete',
@@ -334,17 +358,21 @@ class _VendorApplicationState extends State<VendorApplication> {
         onRefresh: () async {
           widget.onChanged();
           await Future<void>.delayed(const Duration(milliseconds: 600));
-        },
+                },
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
+          if (widget.onBack != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: widget.onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Back to my store'),
+              ),
+            ),
           if (busy) const Padding(padding: EdgeInsets.only(bottom: 12), child: LinearProgressIndicator()),
           LinearProgressIndicator(value: count / 4, minHeight: 8, borderRadius: BorderRadius.circular(8)),
           const SizedBox(height: 14),
-          Text(
-            count == 4
-                ? 'All steps are complete. Our team is reviewing your application and will approve your store.'
-                : 'Complete these steps and our team will review your application. This page updates by itself.',
-            style: TextStyle(color: Theme.of(context).hintColor),
-          ),
+          Text(message, style: TextStyle(color: Theme.of(context).hintColor)),
           const SizedBox(height: 14),
           if (note.isNotEmpty)
             Card(
