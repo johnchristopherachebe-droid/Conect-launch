@@ -168,6 +168,17 @@ CREATE TABLE IF NOT EXISTS vendor_profiles (
 ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS orientation_completed_at TIMESTAMPTZ;
 ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS orientation_completed_by UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS orientation_notes TEXT;
+
+-- Verification badge. A vendor can sell once an admin approves their store (users.vendor_approved),
+-- but customers see "Not verified" until ID, food-safety (food businesses) and orientation are all complete.
+-- Vendors approved before this column existed already passed every check, so they are verified once, at creation.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='stores' AND column_name='is_verified') THEN
+    ALTER TABLE stores ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT false;
+    UPDATE stores s SET is_verified = true FROM users u WHERE u.id = s.vendor_id AND u.vendor_approved;
+  END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
