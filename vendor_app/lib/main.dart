@@ -283,8 +283,9 @@ class _VendorDashboardState extends State<VendorDashboard> {
   Map<String, dynamic>? data;
   List products = [], orders = [], documents = [];
   bool busy = true;
-  String error = '';
+    String error = '';
   int tab = 0;
+  bool verifying = false; // approved vendor opened the verification steps
   int imgVersion = 0;
   Timer? timer;
   List<String> bizTypes = ['food'];
@@ -544,24 +545,26 @@ class _VendorDashboardState extends State<VendorDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    if (busy) return const ConectSplash();
+        if (busy) return const ConectSplash();
     final approved = data?['approved'] == true;
-        return approved
-        ? _approvedShell(context)
-        : VendorApplication(
-            api: widget.api,
-            data: data ?? {},
-            documents: documents,
-            onChanged: () => load(quiet: true),
-            onSignOut: widget.onSignOut,
-          );
+    if (approved && !verifying) return _approvedShell(context);
+    return VendorApplication(
+      api: widget.api,
+      data: data ?? {},
+      documents: documents,
+      approved: approved,
+      onBack: approved ? () => setState(() => verifying = false) : null,
+      onChanged: () => load(quiet: true),
+      onSignOut: widget.onSignOut,
+    );
   }
 
   // ---------------- Approved vendor ----------------
 
   Widget _approvedShell(BuildContext context) {
-    final store = data?['store'];
+        final store = data?['store'];
     final isOpen = store != null && store['is_open'] == true;
+    final verified = store != null && store['is_verified'] == true;
     final newCount = orders.where((o) => o['paid'] == true && o['status'] == 'placed').length;
     final titles = ['Orders', 'Products', 'Store', 'Wallet'];
     return GradientPage(
@@ -580,21 +583,48 @@ class _VendorDashboardState extends State<VendorDashboard> {
           const NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu_rounded), label: 'Products'),
           const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Store'),
           const NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Wallet'),
-        ],
+                ],
             ),
-      child: tab == 0
-          ? _ordersTab()
-          : tab == 1
-              ? _productsTab()
-              : tab == 2
-                  ? _storeTab()
-                  : WalletView(key: const ValueKey('wallet'), send: widget.api.send),
+      child: Column(children: [
+        if (!verified) _verifyBanner(),
+        Expanded(
+          child: tab == 0
+              ? _ordersTab()
+              : tab == 1
+                  ? _productsTab()
+                  : tab == 2
+                      ? _storeTab()
+                      : WalletView(key: const ValueKey('wallet'), send: widget.api.send),
+        ),
+      ]),
     );
   }
 
+  // Approved vendors can sell right away. Until steps 3 and 4 are complete, customers see "Not verified".
+  Widget _verifyBanner() => Material(
+        color: conectLavender,
+        child: InkWell(
+          onTap: () => setState(() => verifying = true),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(children: [
+              Icon(Icons.verified_user_outlined, color: conectPurple, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Not verified yet. Customers see this on your store. Tap to finish your ID check and orientation.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF2A0F55), fontWeight: FontWeight.w600),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: conectPurple),
+            ]),
+          ),
+        ),
+      );
+
   (String, Color) _badge(String status, bool paid) {
     if (status == 'cancelled') return ('Cancelled', const Color(0xFFDC2626));
-    if (!paid) return ('Awaiting payment', conectOrange);
+   if (!paid) return ('Awaiting payment', conectOrange);
     switch (status) {
       case 'delivered':
         return ('Delivered', const Color(0xFF16A34A));
@@ -743,9 +773,9 @@ class _VendorDashboardState extends State<VendorDashboard> {
     return ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
       if (store != null)
         Card(
-          child: SwitchListTile(
+            child: SwitchListTile(
             title: Text(store['name'] ?? 'Your store', style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(store['is_open'] == true ? 'Open for orders' : 'Closed. Customers can’t order.'),
+            subtitle: Text('${store['is_open'] == true ? 'Open for orders' : 'Closed. Customers can’t order.'} · ${store['is_verified'] == true ? 'Verified' : 'Not verified'}'),
             value: store['is_open'] == true,
             onChanged: setStoreOpen,
           ),
@@ -887,9 +917,10 @@ class _VendorDashboardState extends State<VendorDashboard> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Final approval requires approved documents and the required in-person orientation. Your store stays closed until approved.',
+            'Our team approves your store so you can start selling. Approved ID, food-safety documents and orientation then earn your verification badge.',
             style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
           ),
+
         ]),
       ),
     );
