@@ -148,14 +148,14 @@ async function couriersView() {
 }
 async function vendorsView() {
   const rows = await api('GET', '/admin/vendors');
-  $('#view').innerHTML = `<p class="mute">Approve vendors only after reviewing their actual submitted files in Documents and completing required in-person orientation. Document status cannot be manually overridden here.</p><div class="scroll"><table><tr><th>Business</th><th>Owner</th><th>Type</th><th>ID</th><th>Food safety</th><th>Orientation</th><th>Approval</th><th>Review</th></tr>
-  ${rows.map((v) => `<tr><td>${esc(v.business_name || 'Profile missing')}</td><td>${esc(v.name)}<br>${esc(v.email)}</td><td>${esc(v.business_type || '-')}</td><td>${esc(v.government_id_status || 'not submitted')}</td><td>${esc(v.food_safety_status || 'not submitted')}</td><td>${v.orientation_completed ? 'Complete' : 'Pending'}</td><td>${v.vendor_approved ? 'Approved' : 'Pending'}</td><td><button data-review="${esc(v.id)}">Review / approve</button></td></tr>`).join('') || '<tr><td colspan="8" class="mute">No vendor applications yet.</td></tr>'}</table></div>`;
+  $('#view').innerHTML = `<p class="mute">Approve a vendor once their business profile and store (steps 1 and 2) are in. They can then sell, and customers see them as Not verified. The verification badge is added automatically once their ID (and food-safety approval for food businesses) is approved in Documents and their in-person orientation is marked complete. Document status cannot be manually overridden here.</p><div class="scroll"><table><tr><th>Business</th><th>Owner</th><th>Type</th><th>ID</th><th>Food safety</th><th>Orientation</th><th>Approval</th><th>Badge</th><th>Review</th></tr>
+  ${rows.map((v) => `<tr><td>${esc(v.business_name || 'Profile missing')}</td><td>${esc(v.name)}<br>${esc(v.email)}</td><td>${esc((v.business_types || [v.business_type]).filter(Boolean).join(', ') || '-')}</td><td>${esc(v.government_id_status || 'not submitted')}</td><td>${(v.business_types || [v.business_type]).includes('food') ? esc(v.food_safety_status || 'not submitted') : 'Not required'}</td><td>${v.orientation_completed ? 'Complete' : 'Pending'}</td><td>${v.vendor_approved ? 'Approved to sell' : (v.store_id ? 'Pending' : 'Store not created')}</td><td>${v.verified ? 'Verified' : 'Not verified'}</td><td><button data-review="${esc(v.id)}">Review / approve</button></td></tr>`).join('') || '<tr><td colspan="9" class="mute">No vendor applications yet.</td></tr>'}</table></div>`;
   document.querySelectorAll('[data-review]').forEach((b) => b.onclick = () => {
     const id = b.dataset.review, row = rows.find((v) => v.id === id);
-    const orientation = confirm('Confirm that the required in-person orientation is complete?');
+    const orientation = confirm('Is the required in-person orientation complete? OK = complete, Cancel = not yet.');
     const orientationNotes = orientation ? (prompt('Orientation date and topics covered', row.orientation_notes || '') ?? '') : '';
     const notes = prompt('Internal review notes (optional)', row.review_notes || '') ?? '';
-    const approve = confirm('Approve this vendor now? The server verifies uploaded document review statuses and orientation.');
+    const approve = confirm('Let this vendor start selling? OK = approved to sell, Cancel = not approved. The verification badge is added automatically once ID, food safety and orientation are complete.');
     run(async () => { await api('PATCH', `/admin/vendors/${id}/approval`, { approved: approve, orientation_completed: orientation, orientation_notes: orientationNotes, review_notes: notes }); await show(); });
   });
 }
