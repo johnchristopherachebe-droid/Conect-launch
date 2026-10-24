@@ -73,5 +73,34 @@ class GradientPage extends StatelessWidget {
       ),
       bottomNavigationBar: bottomBar,
     );
+    }
+}
+
+/// Verification status on a store: a badge once the vendor is fully verified,
+/// a quiet "Not verified" label while they are still completing verification.
+class StoreVerification extends StatelessWidget {
+  final bool verified;
+  final bool onDark;
+  const StoreVerification({super.key, required this.verified, this.onDark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    if (verified) {
+      return Tooltip(
+        message: 'Verified store',
+        child: Icon(Icons.verified_rounded, size: 18, color: onDark ? Colors.white : const Color(0xFF7C3AED)),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: onDark ? Colors.white24 : const Color(0xFFEFEDF3),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Not verified',
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: onDark ? const Color(0xFFE4D9FF) : const Color(0xFF6B6280)),
+      ),
+    );
   }
 }
