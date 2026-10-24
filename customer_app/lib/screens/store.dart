@@ -6,6 +6,7 @@ import '../state.dart';
 import 'home.dart' show cartBar;
 import 'product_image.dart';
 import 'store_image.dart';
+import '../widgets.dart' show StoreVerification;
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -104,8 +105,10 @@ class _StoreScreenState extends State<StoreScreen> {
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(st['name'],
+                                                        Text(st['name'],
                                 style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            StoreVerification(verified: st['is_verified'] == true, onDark: true),
                             const SizedBox(height: 6),
                             Wrap(spacing: 14, runSpacing: 4, children: [
                               _chip(Icons.star_rounded, ratings > 0 ? '${st['average_rating']} (${ratings.toInt()})' : 'New',
