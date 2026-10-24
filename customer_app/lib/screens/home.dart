@@ -10,6 +10,7 @@ import 'store.dart';
 import 'support.dart';
 import 'account.dart';
 import 'store_image.dart';
+import '../widgets.dart' show StoreVerification;
 
 const BoxDecoration _headerBg = BoxDecoration(
   gradient: LinearGradient(
@@ -313,9 +314,13 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(children: [
             StoreImage(storeId: st['id'], emoji: st['emoji'] ?? '🏪'),
             const SizedBox(width: 14),
-            Expanded(
+                        Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(st['name'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                Row(children: [
+                  Flexible(child: Text(st['name'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                  const SizedBox(width: 6),
+                  StoreVerification(verified: st['is_verified'] == true),
+                ]),
                 const SizedBox(height: 4),
                 Row(children: [
                   const Icon(Icons.star_rounded, size: 16, color: conectOrange),
