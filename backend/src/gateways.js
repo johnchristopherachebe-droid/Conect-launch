@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -114,8 +115,18 @@ const opay = {
 // ---------------- Korapay
 const KORAPAY = 'https://api.korapay.com/merchant/api/v1';
 
+// Kora only whitelists single IPs. When KORA_PROXY_URL is set (a static-IP proxy
+// such as QuotaGuard Static or Fixie), Kora calls go through it; nothing else does.
+let koraDispatcher;
+function koraFetch(url, options) {
+  const proxy = process.env.KORA_PROXY_URL;
+  if (!proxy) return fetch(url, options);
+  koraDispatcher ??= new ProxyAgent(proxy);
+  return undiciFetch(url, { ...options, dispatcher: koraDispatcher });
+}
+
 async function korapayCall(method, path, body) {
-  const r = await fetch(KORAPAY + path, {
+  const r = await koraFetch(KORAPAY + path, {
     method,
     headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json', 'User-Agent': 'Conect-Backend/1.0 (+https://api.cnnet.online)' },
     body: body ? JSON.stringify(body) : undefined,
