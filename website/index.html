@@ -104,6 +104,8 @@ footer{border-top:1px solid var(--line);padding:34px 0 44px;color:var(--mute);fo
 footer .wrap{display:flex;flex-wrap:wrap;gap:14px 28px;justify-content:space-between;align-items:center}
 footer nav{gap:22px}
 footer a{color:var(--mute)}
+.legal{display:grid;gap:4px}
+.legal strong{color:var(--ink);font-size:1.05rem}
 
 @media (max-width:900px){
   .hero{padding:44px 0 64px}
@@ -278,7 +280,10 @@ footer a{color:var(--mute)}
 
 <footer>
   <div class="wrap">
-    <span>© <span id="yr">2026</span> Cönëct. Made in Nigeria.</span>
+    <div class="legal">
+      <strong>AJC Technologies</strong>
+      <span>© <span id="yr">2026</span> AJC Technologies. All rights reserved. Cönëct is operated by AJC Technologies. Made in Nigeria.</span>
+    </div>
     <nav aria-label="Footer">
       <a data-link="terms" href="#">Terms</a>
       <a data-link="privacy" href="#">Privacy</a>
