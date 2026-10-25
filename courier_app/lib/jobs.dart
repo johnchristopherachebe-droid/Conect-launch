@@ -10,6 +10,7 @@ import 'push.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'application.dart';
 import 'wallet.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 
 const _nextLabel = {
   'ready': 'Mark as picked up',
@@ -227,6 +228,21 @@ class _JobsScreenState extends State<JobsScreen> {
     if (!ok && mounted) toast('Could not open that on this device.');
   }
 
+  Future<void> _navigate(Map<String, dynamic> o) async {
+    final lat = double.tryParse('${o['dropoff_lat']}'.trim());
+    final lng = double.tryParse('${o['dropoff_lng']}'.trim());
+    if (lat == null || lng == null || lat.abs() > 90 || lng.abs() > 180 || (lat == 0 && lng == 0)) {
+      return toast("This customer's map pin is not valid. Call them for directions.");
+    }
+    final dest = '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
+    final iphone = defaultTargetPlatform == TargetPlatform.iOS;
+    final uri = iphone
+        ? Uri.https('maps.apple.com', '/', {'daddr': dest, 'dirflg': 'd'})
+        : Uri.https('www.google.com', '/maps/dir/', {'api': '1', 'destination': dest, 'travelmode': 'driving'});
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) toast('Could not open maps on this device.');
+  }
+
   Widget _customerBlock(Map<String, dynamic> o) {
     const dark = Color(0xFF1B1030);
     final name = (o['customer_name'] ?? 'Customer').toString();
@@ -264,8 +280,7 @@ class _JobsScreenState extends State<JobsScreen> {
           if (hasGps)
             OutlinedButton.icon(
               style: small,
-              onPressed: () => _open(
-                  'https://www.google.com/maps/dir/?api=1&destination=${o['dropoff_lat']},${o['dropoff_lng']}&travelmode=driving'),
+               onPressed: () => _navigate(o),
               icon: const Icon(Icons.navigation_outlined, size: 18),
               label: const Text('Navigate'),
             ),
