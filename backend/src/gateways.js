@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -48,148 +47,80 @@ const paystack = {
   },
 };
 
-// ---------------- OPay
-const opayBase = () => process.env.OPAY_BASE_URL
-  || (process.env.OPAY_ENV === 'live' ? 'https://liveapi.opaycheckout.com' : 'https://testapi.opaycheckout.com');
+// ---------------- Payder
+const payderBase = () => process.env.PAYDER_BASE_URL
+  || ((process.env.PAYDER_API_KEY || '').startsWith('pdr_live_') ? 'https://api.payder.ng' : 'https://sandbox-api.payder.ng');
 
-const hmacSha512 = (text, key) => crypto.createHmac('sha512', key).update(text).digest('hex');
-
-async function opayCall(path, body, { signed }) {
-  const raw = JSON.stringify(body);
-  const token = signed ? hmacSha512(raw, process.env.OPAY_PRIVATE_KEY) : process.env.OPAY_PUBLIC_KEY;
-  const r = await fetch(opayBase() + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, MerchantId: process.env.OPAY_MERCHANT_ID },
-    body: raw,
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.code !== '00000') throw httpError(502, j.message || 'The payment provider returned an error');
-  return j.data;
-}
-
-const opay = {
-  code: 'opay',
-  name: 'OPay',
-  description: 'OPay wallet, card, bank transfer or USSD',
-  matchesOrderId: false,
-  configured: () => Boolean(process.env.OPAY_MERCHANT_ID && process.env.OPAY_PUBLIC_KEY && process.env.OPAY_PRIVATE_KEY),
-
-  async initialize({ order, reference, amountKobo, email, publicUrl }) {
-    const back = `${publicUrl}/payment/done?reference=${encodeURIComponent(reference)}`;
-    const d = await opayCall('/api/v1/international/cashier/create', {
-      country: 'NG',
-      reference,
-      amount: { total: amountKobo, currency: 'NGN' },
-      returnUrl: back,
-      cancelUrl: back,
-      callbackUrl: `${publicUrl}/webhooks/opay`,
-      expireAt: 30,
-      userInfo: { userId: String(order.customerId), userEmail: email },
-      product: { name: 'Conect order', description: `Order ${order.id}` },
-    }, { signed: false });
-    if (d.reference !== reference || !d.cashierUrl) throw httpError(502, 'The payment provider returned an invalid checkout response. Please try again.');
-    return { url: d.cashierUrl, reference: d.reference };
-  },
-
-  async verify(reference) {
-    const d = await opayCall('/api/v1/international/cashier/status', { country: 'NG', reference }, { signed: true });
-    const state = d.status === 'SUCCESS' ? 'paid' : ['FAIL', 'CLOSE'].includes(d.status) ? 'failed' : 'pending';
-    return { state, reference: d.reference, currency: d.amount && d.amount.currency, amountKobo: Number(d.amount && d.amount.total), orderId: null };
-  },
-
-  async refund(paymentRef, { amountKobo }) {
-    const reference = 'rf' + crypto.createHash('sha256').update(paymentRef).digest('hex').slice(0, 30);
-    const d = await opayCall('/api/v1/international/payment/refund/create', {
-      amount: { currency: 'NGN', total: amountKobo },
-      callbackUrl: `${process.env.PUBLIC_URL}/webhooks/opay`,
-      country: 'NG',
-      originalReference: paymentRef,
-      reference,
-      refundWay: 'Original',
-    }, { signed: true });
-    if (d.orderStatus === 'FAIL') throw httpError(502, 'OPay did not accept the refund');
-    return d;
-  },
-};
-
-// ---------------- Korapay
-const KORAPAY = 'https://api.korapay.com/merchant/api/v1';
-
-// Kora only whitelists single IPs. When KORA_PROXY_URL is set (a static-IP proxy
-// such as QuotaGuard Static or Fixie), Kora calls go through it; nothing else does.
-let koraDispatcher;
-function koraFetch(url, options) {
-  const proxy = process.env.KORA_PROXY_URL;
-  if (!proxy) return fetch(url, options);
-  koraDispatcher ??= new ProxyAgent(proxy);
-  return undiciFetch(url, { ...options, dispatcher: koraDispatcher });
-}
-
-async function korapayCall(method, path, body) {
-  const r = await koraFetch(KORAPAY + path, {
+async function payderCall(method, path, body, idempotencyKey) {
+  const r = await fetch(payderBase() + path, {
     method,
-    headers: { Authorization: `Bearer ${process.env.KORAPAY_SECRET_KEY}`, 'Content-Type': 'application/json', 'User-Agent': 'Conect-Backend/1.0 (+https://api.cnnet.online)' },
+    headers: {
+      Authorization: `Bearer ${process.env.PAYDER_API_KEY}`,
+      'X-Merchant-Id': process.env.PAYDER_MERCHANT_ID,
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const text = await r.text();
-  let j = {};
-  try { j = JSON.parse(text); } catch { /* not JSON */ }
-  if (!r.ok || j.status === false) {
-    console.error('Korapay error', r.status, method, path, 'server:', r.headers.get('server'),text.replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
-    throw httpError(502, j.message || `The payment provider returned an error (HTTP ${r.status})`);
-  }
-  return j.data;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(httpError(502, (j.error && j.error.message) || 'The payment provider returned an error'), { providerStatus: r.status });
+  return j;
 }
 
-
-const korapay = {
-  code: 'korapay',
-  name: 'Korapay',
-  description: 'Card, bank transfer or pay with bank',
+const payder = {
+  code: 'payder',
+  name: 'Payder',
+  description: 'Card or bank transfer',
   matchesOrderId: false,
-  configured: () => Boolean(process.env.KORAPAY_SECRET_KEY),
+  configured: () => Boolean(process.env.PAYDER_API_KEY && process.env.PAYDER_MERCHANT_ID && process.env.PAYDER_WEBHOOK_SECRET),
 
   async initialize({ order, reference, amountKobo, email, publicUrl }) {
-    const d = await korapayCall('POST', '/charges/initialize', {
+    const d = await payderCall('POST', '/v1/checkouts', {
       reference,
-      amount: amountKobo / 100,
+      amount: amountKobo,
       currency: 'NGN',
-      narration: 'Conect order',
-      redirect_url: `${publicUrl}/payment/done`,
-      notification_url: `${publicUrl}/webhooks/korapay`,
+      description: 'Conect order',
       customer: { email },
-    });
-    if (!d || d.reference !== reference || !d.checkout_url) throw httpError(502, 'The payment provider returned an invalid checkout response. Please try again.');
-    return { url: d.checkout_url, reference: d.reference };
+      returnUrl: `${publicUrl}/payment/done`,
+      metadata: { orderId: order.id },
+    }, `init-${reference}`);
+    if (d.reference !== reference || !d.checkoutUrl) throw httpError(502, 'The payment provider returned an invalid checkout response. Please try again.');
+    return { url: d.checkoutUrl, reference: d.reference };
   },
 
   async verify(reference) {
-    const d = await korapayCall('GET', `/charges/${encodeURIComponent(reference)}`);
-    const state = d.status === 'success' ? 'paid' : ['failed', 'expired'].includes(d.status) ? 'failed' : 'pending';
-    const paid = d.amount_paid ?? d.amount;
-    return {
-      state,
-      reference: [d.reference, d.payment_reference].includes(reference) ? reference : d.reference,
-      currency: d.currency || 'NGN',
-      amountKobo: Math.round(Number(paid) * 100),
-      orderId: null,
-    };
+    const d = await payderCall('GET', `/v1/checkouts/${encodeURIComponent(reference)}`);
+    const state = d.status === 'succeeded' ? 'paid' : d.status === 'failed' ? 'failed' : 'pending';
+    return { state, reference: d.reference, currency: d.currency, amountKobo: Number(d.amount), orderId: null };
   },
 
   async refund(paymentRef, { amountKobo }) {
-    const reference = 'rf' + crypto.createHash('sha256').update(paymentRef).digest('hex').slice(0, 30);
-    const d = await korapayCall('POST', '/refunds/initiate', {
-      payment_reference: paymentRef,
+    const reference = 'rf-' + crypto.createHash('sha256').update(paymentRef).digest('hex').slice(0, 30);
+    const d = await payderCall('POST', '/v1/refunds', {
       reference,
-      amount: amountKobo / 100,
+      paymentReference: paymentRef,
+      amount: amountKobo,
       reason: 'Order refund',
-    });
-    if (d && d.status === 'failed') throw httpError(502, 'Korapay did not accept the refund');
+    }, reference);
+    if (d.status === 'failed') throw httpError(502, 'Payder did not accept the refund');
     return d;
   },
 };
 
-export const gateways = { paystack, opay, korapay };
+export const payderPayouts = {
+  create({ reference, amountKobo, bankName, accountNumber, accountName }) {
+    return payderCall('POST', '/v1/payouts', {
+      reference,
+      amount: amountKobo,
+      currency: 'NGN',
+      recipient: { bankName, accountNumber, accountName },
+      narration: 'Conect payout',
+    }, reference);
+  },
+  get: (reference) => payderCall('GET', `/v1/payouts/${encodeURIComponent(reference)}`),
+};
+
+export const gateways = { paystack, payder };
 export const gatewayCodes = Object.keys(gateways);
 export const isConfigured = (code) => Boolean(gateways[code] && gateways[code].configured());
 export const publicInfo = (code) => ({ code, name: gateways[code].name, description: gateways[code].description });
