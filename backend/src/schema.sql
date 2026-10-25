@@ -353,6 +353,5 @@ CREATE TABLE IF NOT EXISTS payment_gateways (
   updated_by UUID,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-INSERT INTO payment_gateways(code, enabled, sort_order) VALUES ('paystack', true, 10), ('opay', false, 20) ON CONFLICT (code) DO NOTHING;
+INSERT INTO payment_gateways(code, enabled, sort_order) VALUES ('paystack', true, 10) ON CONFLICT (code) DO NOTHING;
 ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS gateway TEXT NOT NULL DEFAULT 'paystack';
-INSERT INTO payment_gateways(code, enabled, sort_order) VALUES ('korapay', false, 30) ON CONFLICT (code) DO NOTHING;
