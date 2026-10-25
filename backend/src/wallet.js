@@ -12,6 +12,29 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const money = z.number().positive().max(100_000_000).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Use at most 2 decimal places');
 
 // ---------- Ledger helpers (all take a transaction client) ----------
+// Called when Payder reports the final result of an automatic withdrawal payout.
+// Success marks it paid; failure rejects it and returns the money to the wallet.
+export async function settleWithdrawalPayout(reference, outcome, reason) {
+  const out = await tx(async (c) => {
+    const w = (await c.query('SELECT * FROM withdrawal_requests WHERE payout_reference=$1 FOR UPDATE', [reference])).rows[0];
+    if (!w) return { kind: 'unknown' };
+    if (w.status !== 'requested') return { kind: 'done' };
+    if (outcome === 'succeeded') {
+      const upd = (await c.query(
+        `UPDATE withdrawal_requests SET status='paid',admin_note='Paid automatically through Payder',processed_at=now() WHERE id=$1 RETURNING *`, [w.id])).rows[0];
+      return { kind: 'paid', withdrawal: upd };
+    }
+    const note = `Bank transfer failed: ${reason || 'rejected by the bank'}`;
+    const upd = (await c.query(
+      `UPDATE withdrawal_requests SET status='rejected',admin_note=$2,processed_at=now() WHERE id=$1 RETURNING *`, [w.id, note])).rows[0];
+    await c.query(`INSERT INTO wallet_entries(user_id,withdrawal_id,kind,amount,note) VALUES($1,$2,'withdrawal_reversal',$3,$4)`,
+      [w.user_id, w.id, Number(w.amount), note]);
+    return { kind: 'rejected', withdrawal: upd };
+  });
+  if (out.kind === 'paid') notifyUser(out.withdrawal.user_id, 'Withdrawal paid', `₦${out.withdrawal.amount} has been sent to your bank account.`, {});
+  if (out.kind === 'rejected') notifyUser(out.withdrawal.user_id, 'Withdrawal failed', `${out.withdrawal.admin_note}. The money is back in your wallet.`, {});
+  return out.kind;
+}
 
 // Pays the vendor (food subtotal minus commission) and the courier (their share of the delivery fee)
 // when an order is delivered. Safe to call twice: unique indexes make the second call a no-op.
@@ -161,6 +184,7 @@ export function registerWallet(app, { adminOnly }) {
       const w = (await c.query('SELECT * FROM withdrawal_requests WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0];
       if (!w) return { kind: 'not_found' };
       if (w.status !== 'requested') return { kind: 'done', status: w.status };
+      if (w.payout_reference && w.payout_reference.startsWith('wd-')) return { kind: 'in_flight' };
       const upd = (await c.query(
         `UPDATE withdrawal_requests SET status=$2,payout_reference=$3,admin_note=$4,processed_by=$5,processed_at=now() WHERE id=$1 RETURNING *`,
         [w.id, b.status, b.payout_reference ?? null, b.note ?? null, req.user.id])).rows[0];
@@ -170,10 +194,42 @@ export function registerWallet(app, { adminOnly }) {
       return { kind: 'ok', withdrawal: upd };
     });
     if (out.kind === 'not_found') return res.status(404).json({ error: 'Withdrawal not found.' });
+    if (out.kind === 'in_flight') return res.status(409).json({ error: 'A Payder payout is already in progress for this withdrawal. Wait for its result.' });
     if (out.kind === 'done') return res.status(409).json({ error: `This withdrawal is already ${out.status}.` });
     notifyUser(out.withdrawal.user_id, b.status === 'paid' ? 'Withdrawal paid' : 'Withdrawal rejected',
       b.status === 'paid' ? `₦${out.withdrawal.amount} has been sent to your bank account.` : `Your withdrawal was rejected: ${b.note}`, {});
     res.json(out.withdrawal);
+  }));
+  // Sends the withdrawal to the person's bank through Payder. The result arrives by webhook.
+  app.post('/admin/withdrawals/:id/pay-with-payder', adminOnly, h(async (req, res) => {
+    if (!isConfigured('payder')) return res.status(409).json({ error: 'Payder is not set up on the server yet.' });
+    const out = await tx(async (c) => {
+      const w = (await c.query('SELECT * FROM withdrawal_requests WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0];
+      if (!w) return { kind: 'not_found' };
+      if (w.status !== 'requested') return { kind: 'done', status: w.status };
+      if (w.payout_reference) return { kind: 'ok', withdrawal: w }; // retry: same reference, so it cannot pay twice
+      const upd = (await c.query(
+        'UPDATE withdrawal_requests SET payout_reference=$2,processed_by=$3 WHERE id=$1 RETURNING *',
+        [w.id, `wd-${w.id}-${Date.now().toString(36)}`, req.user.id])).rows[0];
+      return { kind: 'ok', withdrawal: upd };
+    });
+    if (out.kind === 'not_found') return res.status(404).json({ error: 'Withdrawal not found.' });
+    if (out.kind === 'done') return res.status(409).json({ error: `This withdrawal is already ${out.status}.` });
+    const w = out.withdrawal;
+    try {
+      await payderPayouts.create({
+        reference: w.payout_reference,
+        amountKobo: Math.round(Number(w.amount) * 100),
+        bankName: w.bank_name, accountNumber: w.account_number, accountName: w.account_name,
+      });
+    } catch (e) {
+      // A clear "no" from Payder means nothing was sent, so free the withdrawal to try again.
+      // Anything unclear (timeout, server error) keeps the reference so a retry cannot pay twice.
+      if ([400, 401, 403, 404, 422, 429].includes(e.providerStatus))
+        await q(`UPDATE withdrawal_requests SET payout_reference=NULL,processed_by=NULL WHERE id=$1 AND status='requested'`, [w.id]);
+      throw e;
+    }
+    res.json({ id: w.id, status: 'processing' });
   }));
 
   app.get('/admin/wallets', adminOnly, h(async (_req, res) => {
