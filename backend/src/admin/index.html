@@ -285,7 +285,7 @@ async function payoutsView() {
   const done = history.filter((w) => w.status !== 'requested').slice(0, 30);
   $('#view').innerHTML = `<h2>Withdrawal requests</h2><p class="mute">Send the money from your bank or Paystack dashboard first, then mark the request paid with the transfer reference. Rejecting returns the money to the person's wallet.</p>
   <div class="scroll"><table><tr><th>Requested</th><th>Who</th><th>Amount</th><th>Pay to</th><th></th></tr>
-  ${pending.map((w) => `<tr><td>${new Date(w.created_at).toLocaleString()}</td><td>${esc(w.name)}<br><span class="mute">${esc(w.role)} · ${esc(w.email)}</span></td><td><b>${naira(w.amount)}</b></td><td>${esc(w.account_name)}<br>${esc(w.bank_name)} · ${esc(w.account_number)}</td><td><button class="primary" data-wd-paid="${esc(w.id)}">Mark paid</button> <button data-wd-reject="${esc(w.id)}">Reject</button></td></tr>`).join('') || '<tr><td colspan="5" class="mute">No withdrawals waiting.</td></tr>'}</table></div>
+  ${pending.map((w) => `<tr><td>${new Date(w.created_at).toLocaleString()}</td><td>${esc(w.name)}<br><span class="mute">${esc(w.role)} · ${esc(w.email)}</span></td><td><b>${naira(w.amount)}</b></td><td>${esc(w.account_name)}<br>${esc(w.bank_name)} · ${esc(w.account_number)}</td><td><button class="primary" data-wd-payder="${esc(w.id)}">Pay with Payder</button> <button data-wd-paid="${esc(w.id)}">Mark paid</button> <button data-wd-reject="${esc(w.id)}">Reject</button></td></tr>`).join('') || '<tr><td colspan="5" class="mute">No withdrawals waiting.</td></tr>'}</table></div>
   <h3>Recently settled</h3><div class="scroll"><table><tr><th>When</th><th>Who</th><th>Amount</th><th>Result</th><th>Reference / reason</th></tr>
   ${done.map((w) => `<tr><td>${w.processed_at ? new Date(w.processed_at).toLocaleString() : ''}</td><td>${esc(w.name)}</td><td>${naira(w.amount)}</td><td><span class="pill">${esc(w.status)}</span></td><td>${esc(w.payout_reference || w.admin_note || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="mute">Nothing settled yet.</td></tr>'}</table></div>
   <hr><h2>Wallet balances</h2><div class="scroll"><table><tr><th>Name</th><th>Role</th><th>Balance</th><th>Lifetime earnings</th><th></th></tr>
@@ -293,6 +293,11 @@ async function payoutsView() {
   <hr><h2>Wallet rules</h2><p class="mute">Applies to new orders. The courier share is saved on each order when it is placed.</p>
   <div class="row"><label>Courier share of delivery fee (%)<br><input id="wshare" type="number" min="0" max="100" step="1" value="${esc(st.courier_share_percent?.value ?? 100)}"></label><label>Minimum withdrawal (₦)<br><input id="wmin" type="number" min="0" step="100" value="${esc(st.min_withdrawal?.value ?? 1000)}"></label></div>
   <button class="primary" id="wsave">Save wallet rules</button>`;
+  document.querySelectorAll('[data-wd-payder]').forEach((b) => b.onclick = () => run(async () => {
+    if (!confirm('Send this withdrawal to the bank through Payder now?')) return;
+    await api('POST', `/admin/withdrawals/${b.dataset.wdPayder}/pay-with-payder`);
+    alert('Sent to Payder. It will show as paid once the bank confirms.');
+  }));
   document.querySelectorAll('[data-wd-paid]').forEach((b) => b.onclick = () => run(async () => {
     const ref = prompt('Bank transfer reference for this payout:', ''); if (!ref || !ref.trim()) return;
     await api('PATCH', `/admin/withdrawals/${b.dataset.wdPaid}`, { status: 'paid', payout_reference: ref.trim() });
