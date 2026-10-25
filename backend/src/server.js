@@ -12,8 +12,8 @@ import { q, tx, pool } from './db.js';
 import { sign, requireAuth } from './auth.js';
 import { notifyUser } from './push.js';
 import { startDispatch, dispatchTick } from './dispatch.js';
-import { registerWallet, creditOrderEarnings, reverseOrderEarnings, restoreOrderEarnings } from './wallet.js';
-import { gateways, gatewayCodes, isConfigured, publicInfo } from './gateways.js';
+import { registerWallet, creditOrderEarnings, reverseOrderEarnings, restoreOrderEarnings, settleWithdrawalPayout } from './wallet.js';
+import { gateways, gatewayCodes, isConfigured, publicInfo, payderPayouts } from './gateways.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind Caddy: use the real client IP for rate limits
@@ -30,6 +30,7 @@ const origins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim())
 if (origins.length) app.use(cors({ origin: origins }));
 // Paystack webhook needs the raw body to check its signature, so it comes before express.json().
 app.post('/webhooks/paystack', express.raw({ type: 'application/json' }), paystackWebhook);
+app.post('/webhooks/payder', express.raw({ type: 'application/json' }), payderWebhook);
 app.use(express.json({ limit: '4mb' }));
 
 // Admin web panel (static page; every data call it makes is checked by requireAuth('admin')).
@@ -743,35 +744,48 @@ async function confirmPayment(reference) {
   }
   return outcome.kind === 'already_paid' ? outcome.order : null;
 }
-app.post('/webhooks/korapay', h(async (req, res) => {
-  const event = req.body;
-  const reference = event && event.data && event.data.reference;
-  if (!event || event.event !== 'charge.success' || typeof reference !== 'string' || reference.length > 200) return res.sendStatus(200);
-  const known = (await q(`SELECT 1 FROM payment_attempts WHERE reference=$1 AND gateway='korapay'`, [reference])).rows[0];
-  if (!known) return res.sendStatus(200);
-  try {
-    await confirmPayment(reference);
-    return res.sendStatus(200);
-  } catch (e) {
-    console.error('Korapay webhook processing failed:', e.message);
-    return res.status(500).json({ error: 'Webhook processing failed; retry later.' });
-  }
-}));
+async function payderWebhook(req, res) {
+  const secret = process.env.PAYDER_WEBHOOK_SECRET;
+  if (!secret || !Buffer.isBuffer(req.body)) return res.status(400).json({ error: 'Invalid webhook configuration or body.' });
 
-app.post('/webhooks/opay', h(async (req, res) => {
-  const event = req.body;
-  const reference = event && event.payload && event.payload.reference;
-  if (!event || event.type !== 'transaction-status' || typeof reference !== 'string' || reference.length > 200) return res.sendStatus(200);
-  const known = (await q(`SELECT 1 FROM payment_attempts WHERE reference=$1 AND gateway='opay'`, [reference])).rows[0];
-  if (!known) return res.sendStatus(200);
+  const supplied = req.get('x-payder-signature') || '';
+  if (!/^[a-f0-9]{64}$/i.test(supplied)) return res.sendStatus(401);
+  const expected = crypto.createHmac('sha256', secret).update(req.body).digest();
+  if (!crypto.timingSafeEqual(Buffer.from(supplied, 'hex'), expected)) return res.sendStatus(401);
+
+  let event;
+  try { event = JSON.parse(req.body.toString('utf8')); }
+  catch { return res.status(400).json({ error: 'Malformed webhook JSON.' }); }
+
+  // Payout results (vendor/courier withdrawals). Payder's own API confirms the result before we act.
+  if (event?.event === 'payout.succeeded' || event?.event === 'payout.failed') {
+    const ref = event?.reference;
+    if (typeof ref !== 'string' || ref.length < 1 || ref.length > 200) return res.status(400).json({ error: 'Missing or invalid payout reference.' });
+    try {
+      const p = await payderPayouts.get(ref);
+      if (p.status === 'pending') return res.status(500).json({ error: 'Payout still pending; retry later.' });
+      await settleWithdrawalPayout(ref, p.status, p.failureReason);
+      return res.sendStatus(200);
+    } catch (e) {
+      console.error('Payder payout webhook failed:', e.message);
+      return res.status(500).json({ error: 'Webhook processing failed; retry later.' });
+    }
+  }
+
+  // The signature authenticates the payload; confirmPayment still verifies with Payder's API.
+  if (event?.event !== 'payment.succeeded') return res.sendStatus(200);
+  const reference = event?.reference;
+  if (typeof reference !== 'string' || reference.length < 1 || reference.length > 200) {
+    return res.status(400).json({ error: 'Missing or invalid transaction reference.' });
+  }
   try {
     await confirmPayment(reference);
     return res.sendStatus(200);
   } catch (e) {
-    console.error('OPay webhook processing failed:', e.message);
+    console.error('Payder webhook processing failed:', e.message);
     return res.status(500).json({ error: 'Webhook processing failed; retry later.' });
   }
-}));
+}
 
 async function paystackWebhook(req, res) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
