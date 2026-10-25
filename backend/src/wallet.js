@@ -2,6 +2,7 @@ import { q, tx } from './db.js';
 import { requireAuth } from './auth.js';
 import { notifyUser } from './push.js';
 import { z } from 'zod';
+import { isConfigured, payderPayouts } from './gateways.js';
 
 const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const httpError = (status, message) => Object.assign(new Error(message), { status });
