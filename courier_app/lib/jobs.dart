@@ -165,19 +165,37 @@ class _JobsScreenState extends State<JobsScreen> {
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
-        Card(
-          child: SwitchListTile(
-            secondary: Icon(online ? Icons.wifi_tethering : Icons.wifi_tethering_off,
-                color: online ? const Color(0xFF16A34A) : Theme.of(context).hintColor),
-            title: Text(online ? 'You’re online' : 'You’re offline', style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Shares your location so nearby orders can be offered to you.'),
-            value: online,
-            onChanged: (v) {
-              setState(() => online = v);
-              if (v) sendLocation();
-            },
-          ),
-        ),
+        Builder(builder: (context) {
+          final dark = Theme.of(context).brightness == Brightness.dark;
+          final hint = Theme.of(context).hintColor;
+          return Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+            decoration: BoxDecoration(
+              color: online ? (dark ? const Color(0xFF14361F) : const Color(0xFFDCFCE7)) : Theme.of(context).cardTheme.color,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: online ? const Color(0xFF22C55E) : Theme.of(context).dividerColor),
+            ),
+            child: Row(children: [
+              Container(
+                width: 12, height: 12,
+                decoration: BoxDecoration(color: online ? const Color(0xFF22C55E) : hint, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(online ? 'Online' : 'Offline', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(online ? 'Nearby orders are being offered to you' : 'Go online to receive orders',
+                    style: TextStyle(color: hint, fontSize: 13)),
+              ])),
+              Switch(
+                value: online,
+                onChanged: (v) {
+                  setState(() => online = v);
+                  if (v) sendLocation();
+                },
+              ),
+            ]),
+          );
+        }),
         const SizedBox(height: 16),
         const Text('Your deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
@@ -280,7 +298,7 @@ class _JobsScreenState extends State<JobsScreen> {
           if (hasGps)
             OutlinedButton.icon(
               style: small,
-               onPressed: () => _navigate(o),
+              onPressed: () => _navigate(o),
               icon: const Icon(Icons.navigation_outlined, size: 18),
               label: const Text('Navigate'),
             ),
@@ -315,28 +333,68 @@ class _JobsScreenState extends State<JobsScreen> {
         ]),
       );
 
+  Widget _stop(IconData icon, String title, String detail, {required bool current, required bool done}) {
+    final hint = Theme.of(context).hintColor;
+    final tone = done ? const Color(0xFF16A34A) : (current ? conectPurple : hint);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        width: 32, height: 32,
+        decoration: BoxDecoration(color: current ? conectPurple : tone.withValues(alpha: .15), shape: BoxShape.circle),
+        child: Icon(done ? Icons.check : icon, size: 18, color: current ? Colors.white : tone),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(fontSize: 15, fontWeight: current ? FontWeight.w800 : FontWeight.w600, color: done ? hint : null)),
+            Text(detail, style: TextStyle(color: hint, height: 1.3)),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
   Widget _activeCard(Map<String, dynamic> o) {
     final status = o['status'].toString();
+    final toStore = status != 'picked_up';
     final pickup = (o['pickup_address'] ?? '').toString().trim();
-    final phone = (o['customer_phone'] ?? '').toString().trim();
+    final hasPickupGps = o['pickup_lat'] != null && o['pickup_lng'] != null;
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-            _pill(status.replaceAll('_', ' '), conectPurple),
+            Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+            _pill(toStore ? 'Go to store' : 'Deliver now', conectPurple),
           ]),
-          const SizedBox(height: 4),
-          Text(_stageText[status] ?? '', style: TextStyle(color: Theme.of(context).hintColor)),
-          const SizedBox(height: 12),
-          _line(Icons.storefront_outlined, pickup.isEmpty ? 'Pickup address not provided' : pickup),
-          if (o['pickup_lat'] != null && o['pickup_lng'] != null)
-            _line(Icons.my_location, '${o['pickup_lat']}, ${o['pickup_lng']}'),
-                    _customerBlock(o),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
+          _stop(Icons.storefront_outlined, 'Pickup', pickup.isEmpty ? 'Pickup address not provided' : pickup,
+              current: toStore, done: !toStore),
+          Container(
+            margin: const EdgeInsets.only(left: 15, top: 4, bottom: 4),
+            width: 2, height: 16,
+            color: Theme.of(context).dividerColor,
+          ),
+          _stop(Icons.home_outlined, 'Drop-off', '${o['label']}: ${o['line1']}, ${o['city']}',
+              current: !toStore, done: false),
+          if (toStore && hasPickupGps) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => _navigate({'dropoff_lat': o['pickup_lat'], 'dropoff_lng': o['pickup_lng']}),
+              icon: const Icon(Icons.navigation_outlined, size: 20),
+              label: const Text('Navigate to store'),
+            ),
+          ],
+          _customerBlock(o),
+          const SizedBox(height: 16),
           FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(60),
+              textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
             onPressed: () => status == 'picked_up' ? confirmDelivery(o) : act('/courier/orders/${o['id']}/advance'),
             child: Text(_nextLabel[status] ?? 'Next'),
           ),
@@ -345,23 +403,37 @@ class _JobsScreenState extends State<JobsScreen> {
     );
   }
 
-  Widget _availableCard(Map<String, dynamic> o) => Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-              _pill('₦${n(o['delivery_fee']).toStringAsFixed(0)}', conectOrange),
+  Widget _availableCard(Map<String, dynamic> o) {
+    final hint = Theme.of(context).hintColor;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Text(o['store_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('₦${n(o['delivery_fee']).toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: conectOrange)),
+              Text('delivery fee', style: TextStyle(fontSize: 12, color: hint)),
             ]),
-            const SizedBox(height: 8),
-            _line(Icons.storefront_outlined, 'Pick up: ${(o['pickup_address'] ?? o['store_name']).toString()}'),
-            _line(Icons.location_on_outlined, 'Deliver: ${o['line1']}, ${o['city']}'),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: () => act('/courier/orders/${o['id']}/accept'), child: const Text('Accept order')),
           ]),
-        ),
-      );
+          const SizedBox(height: 10),
+          _line(Icons.storefront_outlined, (o['pickup_address'] ?? o['store_name']).toString()),
+          _line(Icons.home_outlined, '${o['line1']}, ${o['city']}'),
+          const SizedBox(height: 14),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            onPressed: () => act('/courier/orders/${o['id']}/accept'),
+            child: const Text('Accept order'),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 class CourierOnboarding extends StatefulWidget {
