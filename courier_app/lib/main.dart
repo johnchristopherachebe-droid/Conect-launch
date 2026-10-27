@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'auth.dart';
-import 'jobs.dart';
+import 'shell.dart';
 import 'push.dart';
 import 'brand.dart';
 import 'onboarding.dart';
