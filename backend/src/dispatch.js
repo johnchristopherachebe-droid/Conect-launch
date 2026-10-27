@@ -7,7 +7,11 @@ const WAIT_SECONDS = 45;  // wait this long for someone to accept before the nex
 const FRESH_SECONDS = 120; // a courier counts as online if their location is newer than this
 const MAX_ROUNDS = 3;     // after this many empty waves, alert every courier once
 
+// How many deliveries one courier can carry at the same time (override with MAX_ACTIVE_ORDERS).
+export const MAX_ACTIVE_ORDERS = Math.max(1, Number(process.env.MAX_ACTIVE_ORDERS) || 5);
+
 let running = false;
+
 
 function km(lat1, lng1, lat2, lng2) {
   const r = (x) => (x * Math.PI) / 180;
@@ -48,18 +52,18 @@ async function dispatchOrder(id) {
   const { rows: candidates } = await q(
     `SELECT u.id, l.lat, l.lng FROM users u JOIN courier_locations l ON l.courier_id = u.id
      WHERE u.role = 'courier' AND u.courier_approved = true AND l.updated_at > now() - make_interval(secs => $2)
-       AND NOT EXISTS (SELECT 1 FROM orders a WHERE a.courier_id = u.id
-                       AND a.status IN ('placed','preparing','ready','picked_up'))
+              AND (SELECT count(*) FROM orders a WHERE a.courier_id = u.id
+            AND a.status IN ('ready','picked_up')) < $3
        AND NOT EXISTS (SELECT 1 FROM order_offers f WHERE f.order_id = $1 AND f.courier_id = u.id)`,
-    [id, FRESH_SECONDS]);
+    [id, FRESH_SECONDS, MAX_ACTIVE_ORDERS]);
 
   if (!candidates.length) {
     if (round >= MAX_ROUNDS) {
       await q('UPDATE orders SET dispatch_round = 99 WHERE id = $1', [id]);
       const { rows: fallback } = await q(
         `SELECT u.id FROM users u WHERE u.role='courier' AND u.courier_approved=true
-         AND NOT EXISTS (SELECT 1 FROM orders a WHERE a.courier_id=u.id AND a.status IN ('ready','picked_up'))
-         AND NOT EXISTS (SELECT 1 FROM order_offers f WHERE f.order_id=$1 AND f.courier_id=u.id)`, [id]);
+        AND (SELECT count(*) FROM orders a WHERE a.courier_id=u.id AND a.status IN ('ready','picked_up')) < $2
+         AND NOT EXISTS (SELECT 1 FROM order_offers f WHERE f.order_id=$1 AND f.courier_id=u.id)`, [id, MAX_ACTIVE_ORDERS]);
       for (const courier of fallback) await q('INSERT INTO order_offers (order_id,courier_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',[id,courier.id]);
       await notifyCouriers('Order waiting for a courier', 'Nearby offers were not accepted. Open Cönëct Courier to check the waiting order.', { orderId: id });
     }
