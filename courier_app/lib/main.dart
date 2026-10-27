@@ -40,7 +40,7 @@ class _CourierAppState extends State<CourierApp> {
       debugShowCheckedModeBanner: false,
       theme: conectTheme(Brightness.light),
       darkTheme: conectTheme(Brightness.dark),
-            home: signedIn ? JobsScreen(onSignOut: signOut) : FirstRunGate(child: AuthScreen(onDone: () => setState(() {}))),
+            home: signedIn ? CourierShell(onSignOut: signOut) : FirstRunGate(child: AuthScreen(onDone: () => setState(() {}))),
     );
   }
 }
