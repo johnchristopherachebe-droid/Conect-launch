@@ -31,6 +31,10 @@ if (origins.length) app.use(cors({ origin: origins }));
 // Paystack webhook needs the raw body to check its signature, so it comes before express.json().
 app.post('/webhooks/paystack', express.raw({ type: 'application/json' }), paystackWebhook);
 app.post('/webhooks/payder', express.raw({ type: 'application/json' }), payderWebhook);
+app.post('/webhooks/sendbox', express.json({ limit: '100kb' }), (_req, res) => {
+  console.log('Sendbox webhook received');
+  res.sendStatus(200);
+});
 app.use(express.json({ limit: '4mb' }));
 
 // Admin web panel (static page; every data call it makes is checked by requireAuth('admin')).
