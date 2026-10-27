@@ -45,6 +45,15 @@ ThemeData conectTheme(Brightness b) {
       fillColor: dark ? const Color(0xFF1C1430) : Colors.white,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     ),
+        snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+    navigationBarTheme: NavigationBarThemeData(
+      height: 68,
+      elevation: 0,
+      backgroundColor: dark ? const Color(0xFF1C1430) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: dark ? const Color(0xFF3B2A63) : conectLavender,
+      labelTextStyle: const WidgetStatePropertyAll(TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+    ),
     cardTheme: CardThemeData(
       color: dark ? const Color(0xFF1C1430) : Colors.white,
       elevation: 0,
@@ -177,13 +186,16 @@ class GradientPage extends StatelessWidget {
   final String? subtitle;
   final Widget child;
   final List<Widget> actions;
+  final Widget? header; // optional strip under the title, e.g. quick stats
   const GradientPage({
     super.key,
     required this.title,
     required this.child,
     this.subtitle,
     this.actions = const [],
+    this.header,
   });
+
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -211,6 +223,7 @@ class GradientPage extends StatelessWidget {
                 ]),
               ),
             ),
+              if (header != null) Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 18), child: header!),
             Expanded(
               child: Container(
                 width: double.infinity,
