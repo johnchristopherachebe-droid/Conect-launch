@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { q, tx, pool } from './db.js';
 import { sign, requireAuth } from './auth.js';
 import { notifyUser } from './push.js';
-import { startDispatch, dispatchTick } from './dispatch.js';
+import { startDispatch, dispatchTick, MAX_ACTIVE_ORDERS } from './dispatch.js';
 import { registerWallet, creditOrderEarnings, reverseOrderEarnings, restoreOrderEarnings, settleWithdrawalPayout } from './wallet.js';
 import { gateways, gatewayCodes, isConfigured, publicInfo, payderPayouts } from './gateways.js';
 
@@ -828,7 +828,7 @@ app.get('/courier/profile', requireAuth('courier'), h(async(req,res)=>{
   const profile=(await q('SELECT * FROM courier_profiles WHERE user_id=$1',[req.user.id])).rows[0]??null;
   const user=(await q('SELECT courier_approved FROM users WHERE id=$1',[req.user.id])).rows[0];
   const documents=(await q('SELECT id,document_type,filename,mime_type,review_status,created_at FROM verification_documents WHERE user_id=$1 ORDER BY created_at DESC',[req.user.id])).rows;
-  res.json({profile,approved:Boolean(user?.courier_approved),documents});
+  res.json({profile,approved:Boolean(user?.courier_approved),documents,max_active:MAX_ACTIVE_ORDERS});
 }));
 app.put('/courier/profile', requireAuth('courier'), h(async(req,res)=>{
   const b=parse(z.object({phone:z.string().trim().min(7).max(30),address:z.string().trim().min(5).max(300),vehicle_type:z.enum(['bicycle','motorcycle','car','other']),license_number:z.string().trim().max(100).optional()}).strict(),req.body);
@@ -852,17 +852,29 @@ app.get('/courier/available', requireAuth('courier'), approvedCourier, h(async (
 }));
 
 // Atomic claim: only an explicitly offered courier can win the order.
+// A courier can hold up to MAX_ACTIVE_ORDERS deliveries at once.
 app.post('/courier/orders/:id/accept', requireAuth('courier'), approvedCourier, h(async (req, res) => {
-  const { rows } = await q(
-    `UPDATE orders o SET courier_id=$2, updated_at=now()
-     WHERE o.id=$1 AND o.courier_id IS NULL AND o.paid AND o.status='ready'
-       AND EXISTS (SELECT 1 FROM order_offers f WHERE f.order_id=o.id AND f.courier_id=$2)
-       AND NOT EXISTS (SELECT 1 FROM orders a WHERE a.courier_id=$2 AND a.status IN ('ready','picked_up')) RETURNING o.*`,
-    [req.params.id, req.user.id]);
-  if (!rows[0]) return res.status(409).json({ error: 'Another courier already took this order' });
-  notifyUser(rows[0].customer_id, 'Courier assigned', 'A courier accepted your order.', { orderId: rows[0].id });
-  res.json(rows[0]);
+  const result = await tx(async (c) => {
+    // One accept at a time per courier, so two quick taps cannot slip past the limit.
+    await c.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [req.user.id]);
+    const { rows: [cnt] } = await c.query(
+      `SELECT count(*)::int AS n FROM orders WHERE courier_id=$1 AND status IN ('ready','picked_up')`, [req.user.id]);
+    if (cnt.n >= MAX_ACTIVE_ORDERS) return { full: true };
+    const { rows } = await c.query(
+      `UPDATE orders o SET courier_id=$2, updated_at=now()
+       WHERE o.id=$1 AND o.courier_id IS NULL AND o.paid AND o.status='ready'
+         AND EXISTS (SELECT 1 FROM order_offers f WHERE f.order_id=o.id AND f.courier_id=$2) RETURNING o.*`,
+      [req.params.id, req.user.id]);
+    return { order: rows[0] };
+  });
+  if (result.full) {
+    return res.status(409).json({ error: `You can carry up to ${MAX_ACTIVE_ORDERS} deliveries at once. Finish one first.` });
+  }
+  if (!result.order) return res.status(409).json({ error: 'Another courier already took this order' });
+  notifyUser(result.order.customer_id, 'Courier assigned', 'A courier accepted your order.', { orderId: result.order.id });
+  res.json(result.order);
 }));
+
 import { registerDeliveryPin } from './delivery-pin.js';
 registerDeliveryPin(app, { approvedCourier });
 import { registerExtras } from './extras.js';
@@ -910,7 +922,8 @@ app.get('/courier/active', requireAuth('courier'), approvedCourier, h(async (req
   res.json((await q(
     `SELECT o.id, o.status, o.total, s.name AS store_name,
             s.lat AS pickup_lat, s.lng AS pickup_lng, vp.address AS pickup_address,
-            a.label, a.line1, a.city, u.phone AS customer_phone
+                        a.label, a.line1, a.city, a.lat AS dropoff_lat, a.lng AS dropoff_lng,
+            u.phone AS customer_phone, u.name AS customer_name, o.delivery_fee
      FROM orders o JOIN stores s ON s.id=o.store_id JOIN addresses a ON a.id=o.address_id
      JOIN users u ON u.id=o.customer_id
      LEFT JOIN vendor_profiles vp ON vp.user_id=s.vendor_id
